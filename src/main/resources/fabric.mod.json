@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "npcmessageparser",
+  "version": "${version}",
+  "name": "Story",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.canefe.storyclient.client.NPCMessageParserClient"
+    ],
+    "modmenu": [
+      "com.canefe.storyclient.client.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "npcmessageparser.mixins.json",
+    {
+      "config": "npcmessageparser.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-language-kotlin": ">=${kotlin_loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
