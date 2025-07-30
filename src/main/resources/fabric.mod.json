@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "npcmessageparser",
+  "id": "storyclient",
   "version": "${version}",
   "name": "Story",
   "description": "",
@@ -17,9 +17,9 @@
     ]
   },
   "mixins": [
-    "npcmessageparser.mixins.json",
+    "storyclient.mixins.json",
     {
-      "config": "npcmessageparser.client.mixins.json",
+      "config": "storyclient.client.mixins.json",
       "environment": "client"
     }
   ],

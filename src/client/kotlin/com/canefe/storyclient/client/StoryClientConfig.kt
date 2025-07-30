@@ -5,7 +5,7 @@ import java.io.File
 
 object StoryClientConfig {
     var modEnabled = true
-    var messageVanishTime: Double = 10000.0
+    var messageVanishTime: Double = 5.0
 
     private val gson = Gson()
     private val configFile = File("config/storyclient.json")

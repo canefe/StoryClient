@@ -27,7 +27,7 @@ loom {
     splitEnvironmentSourceSets()
 
     mods {
-        register("npcmessageparser") {
+        register("storyclient") {
             sourceSet("main")
             sourceSet("client")
         }
