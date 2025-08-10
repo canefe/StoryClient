@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
+import net.minecraft.client.MinecraftClient
 import net.minecraft.network.PacketByteBuf
 import net.minecraft.network.codec.PacketCodec
 import net.minecraft.network.packet.CustomPayload
@@ -13,6 +14,7 @@ import net.minecraft.util.Identifier
 import java.io.ByteArrayInputStream
 import javax.sound.sampled.*
 import javazoom.jl.player.Player
+import net.minecraft.sound.SoundCategory
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
@@ -100,8 +102,27 @@ class NPCMessageParserClient : ClientModInitializer {
         }
     }
 
+    private fun stopCurrentAudio() {
+        try {
+            audioClip?.let { clip ->
+                if (clip.isRunning) {
+                    clip.stop()
+                    println("🛑 Stopped currently playing audio")
+                }
+                clip.close()
+                audioClip = null
+            }
+        } catch (e: Exception) {
+            println("❌ Error stopping current audio: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
     private fun playAudio(audioData: ByteArray) {
         try {
+            // Stop any currently playing audio first
+            stopCurrentAudio()
+
             println("🎵 Received audio data: ${audioData.size} bytes")
 
             // Print first few bytes for debugging
@@ -324,10 +345,38 @@ class NPCMessageParserClient : ClientModInitializer {
             audioClip = AudioSystem.getClip()
             audioClip?.open(audioInputStream)
 
+            // Set volume based on Minecraft's volume settings
+            try {
+                val volume = MinecraftClient.getInstance().options.getSoundVolume(SoundCategory.VOICE)
+                println("🔊 Voice volume: ${(volume * 100).toInt()}%")
+
+                val gainControl = audioClip?.getControl(FloatControl.Type.MASTER_GAIN) as? FloatControl
+                if (gainControl != null) {
+                    val gain = if (volume > 0.0) {
+                        val minGain = gainControl.minimum
+                        val maxGain = gainControl.maximum
+
+                        // Use exponential curve for better volume perception
+                        // This makes lower percentages more audible
+                        val adjustedVolume = volume * volume // Square the volume for better curve
+                        minGain + (maxGain - minGain) * adjustedVolume.toFloat()
+                    } else {
+                        gainControl.minimum // Mute
+                    }
+                    gainControl.value = gain
+                    println("🔊 Set WAV audio gain to ${gain} dB (range: ${gainControl.minimum} to ${gainControl.maximum})")
+                } else {
+                    println("⚠️ No gain control available for WAV audio")
+                }
+            } catch (e: Exception) {
+                println("⚠️ Could not set volume control for WAV audio: ${e.message}")
+            }
+
             // Add line listener to clean up when done
             audioClip?.addLineListener { event ->
                 if (event.type == LineEvent.Type.STOP) {
                     audioClip?.close()
+                    audioClip = null
                 }
             }
 
@@ -462,10 +511,35 @@ class NPCMessageParserClient : ClientModInitializer {
             audioClip = AudioSystem.getClip()
             audioClip?.open(audioInputStream)
 
+            // Set volume based on Minecraft's volume settings
+            try {
+                val volume = MinecraftClient.getInstance().options.getSoundVolume(SoundCategory.VOICE)
+                val gainControl = audioClip?.getControl(FloatControl.Type.MASTER_GAIN) as? FloatControl
+                if (gainControl != null) {
+                    val gain = if (volume > 0.0) {
+                        val minGain = gainControl.minimum
+                        val maxGain = gainControl.maximum
+
+                        // Use exponential curve for better volume perception
+                        val adjustedVolume = volume * volume // Square the volume for better curve
+                        minGain + (maxGain - minGain) * adjustedVolume.toFloat()
+                    } else {
+                        gainControl.minimum // Mute
+                    }
+                    gainControl.value = gain
+                    println("🔊 Set PCM audio volume to ${(volume * 100).toInt()}% (${gain} dB)")
+                } else {
+                    println("⚠️ No gain control available for PCM audio")
+                }
+            } catch (e: Exception) {
+                println("⚠️ Could not set volume control for PCM audio: ${e.message}")
+            }
+
             // Add line listener to clean up when done
             audioClip?.addLineListener { event ->
                 if (event.type == LineEvent.Type.STOP) {
                     audioClip?.close()
+                    audioClip = null
                 }
             }
 
@@ -515,3 +589,4 @@ class NPCMessageParserClient : ClientModInitializer {
                data[11] == 'E'.code.toByte()
     }
 }
+
