@@ -6,6 +6,8 @@ import java.io.File
 object StoryClientConfig {
     var modEnabled = true
     var messageVanishTime: Double = 5.0
+    var dialogueScale: Double = 1.0
+    var dialogueYOffset: Int = 80
 
     private val gson = Gson()
     private val configFile = File("config/storyclient.json")
@@ -16,17 +18,21 @@ object StoryClientConfig {
             val loaded = gson.fromJson(json, StoryConfigData::class.java)
             modEnabled = loaded.modEnabled
             messageVanishTime = loaded.messageVanishTime
+            dialogueScale = loaded.dialogueScale
+            dialogueYOffset = loaded.dialogueYOffset
         }
     }
 
     fun save() {
-        val data = StoryConfigData(modEnabled, messageVanishTime)
+        val data = StoryConfigData(modEnabled, messageVanishTime, dialogueScale, dialogueYOffset)
         configFile.parentFile.mkdirs()
         configFile.writeText(gson.toJson(data))
     }
 
     private data class StoryConfigData(
         val modEnabled: Boolean = true,
-        val messageVanishTime: Double
+        val messageVanishTime: Double,
+        val dialogueScale: Double = 1.0,
+        val dialogueYOffset: Int = 80
     )
 }

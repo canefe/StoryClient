@@ -36,6 +36,34 @@ object StoryClientConfigScreen {
                 .build()
         )
 
+        general.addEntry(
+            entryBuilder.startDoubleField(Text.literal("Dialogue Box Scale"), StoryClientConfig.dialogueScale)
+                .setDefaultValue(1.0)
+                .setMin(0.5)
+                .setMax(3.0)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.dialogueScale = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Scale factor for dialogue box size (0.5x to 3.0x)"))
+                .build()
+        )
+
+        general.addEntry(
+            entryBuilder.startIntField(Text.literal("Dialogue Box Y Position"), StoryClientConfig.dialogueYOffset)
+                .setDefaultValue(80)
+                .setMin(0)
+                .setMax(300)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.dialogueYOffset = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Distance from bottom of screen (0 = bottom, higher = more up)"))
+                .build()
+        )
+
 
         return builder.build()
     }

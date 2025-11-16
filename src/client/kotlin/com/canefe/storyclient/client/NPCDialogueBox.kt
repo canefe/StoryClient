@@ -28,6 +28,7 @@ object NPCDialogueHud {
     private const val BOX_WIDTH = 250
     private const val BOX_HEIGHT = 50
     private const val MARGIN = 5
+    private const val PADDING = 12            // Further reduced to give more text width
 
     init {
         HudRenderCallback.EVENT.register { ctx, _ ->
@@ -170,6 +171,23 @@ object NPCDialogueHud {
         // Skip rendering entirely if opacity is 0
         if (opacity <= 0f) return
 
+        val client = MinecraftClient.getInstance()
+        val scale = StoryClientConfig.dialogueScale.toFloat()
+
+        // Apply scaling transformation
+        val matrices = ctx.matrices
+        matrices.push()
+
+        // Scale around the center of the dialogue box area
+        val sw = client.window.scaledWidth
+        val sh = client.window.scaledHeight
+        val centerX = sw / 2f
+        val centerY = sh - 130f // Approximate center of dialogue area
+
+        matrices.translate(centerX, centerY, 0f)
+        matrices.scale(scale, scale, 1f)
+        matrices.translate(-centerX, -centerY, 0f)
+
         // Apply opacity to all colors
         val bgAlpha = (0xFF * opacity).toInt()
         val textAlpha = (0xFF * opacity).toInt()
@@ -182,13 +200,10 @@ object NPCDialogueHud {
         val textBaseColor = (textAlpha shl 24) or 0x52130A
         val avatarColor = (avatarAlpha shl 24) or 0xFFFFFF
 
-        val client = MinecraftClient.getInstance()
         val textRenderer = client.textRenderer
-        val sw = client.window.scaledWidth
-        val sh = client.window.scaledHeight
 
         // how much padding inside the box
-        val PADDING = 12
+        // val PADDING = 12
 
         // 1) pull the raw string (full or partial)
         val visibleRaw = fullTextRaw
@@ -198,7 +213,7 @@ object NPCDialogueHud {
         val cleanedRaw = visibleRaw
             .lineSequence()
             .map { it.trimStart() }
-            .joinToString("\n")
+            .joinToString(" ")
 
         // 2) tokenize on '*' to figure out which bits go italic+gray
         val tokens = mutableListOf<Pair<String, Boolean>>()  // (text, isItalic)
@@ -220,7 +235,8 @@ object NPCDialogueHud {
 
         // 3) build one big styled Text from those tokens
         var formatted = Text.empty()
-        for ((piece, isIt) in tokens) {
+        for (i in tokens.indices) {
+            val (piece, isIt) = tokens[i]
             if (piece.isEmpty()) continue
             if (isIt) {
                 // wrap in parentheses if the user didn't already
@@ -230,13 +246,21 @@ object NPCDialogueHud {
                     Text.literal(inside)
                         .styled { s -> s.withItalic(true).withColor(Formatting.DARK_GRAY) }
                 )
+                // Add a newline after the action to match server formatting
+                formatted = formatted.append(Text.literal("\n"))
             } else {
-                formatted = formatted.append(Text.literal(piece))
+                // If this is the piece right after an action, trim leading spaces for proper alignmentso
+                val isAfterAction = i > 0 && tokens[i - 1].second
+                val processedPiece = if (isAfterAction) piece.trimStart() else piece
+                formatted = formatted.append(Text.literal(processedPiece))
             }
         }
+
         // 3) wrap it to lines
-        val maxTextWidth = sw - PADDING * 2   // temporary cap so wrapLines never goes off-screen
+        val maxTextWidth = BOX_WIDTH - PADDING * 2
+        // temporary cap so wrapLines never goes off-screen
         val wrappedLines = textRenderer.wrapLines(formatted, maxTextWidth)
+
 
         // 4) measure widest line
         val widest = wrappedLines.maxOfOrNull { textRenderer.getWidth(it) } ?: 0
@@ -248,7 +272,7 @@ object NPCDialogueHud {
 
         val boxHeight = max(BOX_HEIGHT,  PADDING * 2 + (linesCount * lineHeight))
         val x = (sw - boxWidth) / 2
-        val y = sh - boxHeight - 80
+        val y = sh - boxHeight - StoryClientConfig.dialogueYOffset
 
 // 6) draw background & border
 // Main background
@@ -357,6 +381,9 @@ object NPCDialogueHud {
             val ay = y + boxHeight - PADDING - lineHeight
             ctx.drawText(textRenderer, arrow, ax, ay, textBaseColor, false)
         }
+
+        // Restore the matrix transformation
+        matrices.pop()
     }
 
 
