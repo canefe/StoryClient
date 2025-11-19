@@ -17,7 +17,7 @@ public class ClientPlayNetworkHandlerMixin {
         String rawText = message.getString();
         // Check if this is an NPC typing message
         if (rawText.contains("<npc_typing>")) {
-            System.out.println("DEBUG: Found typing tag, passing to manager");
+            System.out.println("DEBUG: Found typing tag, passing to manager: " + rawText);
             // Pass to our TypingManager
             TypingManager.INSTANCE.onIncomingServerMessage(rawText);
             // Cancel the vanilla chat message handling
@@ -25,7 +25,7 @@ public class ClientPlayNetworkHandlerMixin {
             System.out.println("DEBUG: Message handling cancelled");
         }
         else if (rawText.contains("<npc_typing_end>")) {
-            System.out.println("DEBUG: Found typing end tag, passing to manager");
+            System.out.println("DEBUG: Found typing end tag, passing to manager: " + rawText);
             // Pass to our TypingManager
             TypingManager.INSTANCE.onIncomingServerMessage(rawText);
             // Cancel the vanilla chat message handling

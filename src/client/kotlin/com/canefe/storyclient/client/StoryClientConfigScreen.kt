@@ -39,7 +39,7 @@ object StoryClientConfigScreen {
         general.addEntry(
             entryBuilder.startDoubleField(Text.literal("Dialogue Box Scale"), StoryClientConfig.dialogueScale)
                 .setDefaultValue(1.0)
-                .setMin(0.5)
+                .setMin(0.1)
                 .setMax(3.0)
                 .setSaveConsumer { newValue ->
                     StoryClientConfig.dialogueScale = newValue
@@ -64,6 +64,60 @@ object StoryClientConfigScreen {
                 .build()
         )
 
+        general.addEntry(
+            entryBuilder.startBooleanToggle(Text.literal("Use Bubble Renderer (Above NPCs)"), StoryClientConfig.useBubbleRenderer)
+                .setDefaultValue(false)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.useBubbleRenderer = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Show dialogue bubbles above NPC entities instead of on screen HUD"))
+                .build()
+        )
+
+        // Audio Category
+        val audio: ConfigCategory = builder.getOrCreateCategory(Text.literal("Audio"))
+
+        audio.addEntry(
+            entryBuilder.startBooleanToggle(Text.literal("Use 3D Positional Audio"), StoryClientConfig.use3DAudio)
+                .setDefaultValue(true)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.use3DAudio = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Play NPC voices with 3D positional audio (distance attenuation and stereo panning)"))
+                .build()
+        )
+
+        audio.addEntry(
+            entryBuilder.startDoubleField(Text.literal("Maximum Audio Distance"), StoryClientConfig.maxAudioDistance)
+                .setDefaultValue(32.0)
+                .setMin(8.0)
+                .setMax(64.0)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.maxAudioDistance = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Maximum distance (in blocks) to hear NPC audio"))
+                .build()
+        )
+
+        audio.addEntry(
+            entryBuilder.startDoubleField(Text.literal("Minimum Audio Distance"), StoryClientConfig.minAudioDistance)
+                .setDefaultValue(2.0)
+                .setMin(0.0)
+                .setMax(8.0)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.minAudioDistance = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Distance (in blocks) before audio volume attenuation starts"))
+                .build()
+        )
 
         return builder.build()
     }

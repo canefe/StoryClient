@@ -24,13 +24,45 @@ object TypingManager {
 
     fun getActiveSession(): TypingSession? = activeSessions.values.firstOrNull()
 
+    fun getActiveNpcUuid(): String? = activeSessions.keys.firstOrNull()
 
     private fun parseAndDisplayNpcMessage(npcId: String, text: String, color: String? = null) {
+        // Find entity ID by searching for entities near the player
+        val entityId = findNpcEntityId(npcId)
+
         if (npcId !in activeSessions) {
-            NPCDialogueHud.startDialogue(npcId, text, color)
+            if (StoryClientConfig.useBubbleRenderer) {
+                BubbleRenderer.startBubble(npcId, entityId, text, color)
+            } else {
+                NPCDialogueHud.startDialogue(npcId, text, color)
+            }
         } else {
-            NPCDialogueHud.updateDialogue(npcId, text, color)
+            if (StoryClientConfig.useBubbleRenderer) {
+                BubbleRenderer.updateBubble(npcId, text, color)
+            } else {
+                NPCDialogueHud.updateDialogue(npcId, text, color)
+            }
         }
+    }
+
+    private fun findNpcEntityId(npcId: String): Int? {
+        val client = MinecraftClient.getInstance()
+        val player = client.player ?: return null
+        val world = client.world ?: return null
+
+        // Search for nearby entities that might match this NPC
+        val searchBox = net.minecraft.util.math.Box.of(
+            player.pos,
+            64.0, 64.0, 64.0
+        )
+
+        val nearbyEntities = world.getOtherEntities(null, searchBox) {
+            it is net.minecraft.entity.LivingEntity &&
+            !it.isPlayer &&
+            it.uuidAsString == npcId
+        }
+
+        return nearbyEntities.firstOrNull()?.id
     }
 
     fun onIncomingServerMessage(rawText: String) {
@@ -88,10 +120,29 @@ object TypingManager {
                 }
             }
         } else if (rawText.contains("<npc_typing_end>")) {
-            // get npcId from id:xxx (example: "<npc_typing_end>id:12345")
-            finishAllSessions()
-            NPCDialogueHud.endDialogue("a")
+            println("DEBUG TypingManager: Processing typing end message")
+            // Parse npcId from the message if available (format: "<npc_typing_end>id:uuid")
+            val endContent = rawText.substringAfter("<npc_typing_end>")
+            println("DEBUG TypingManager: End content = '$endContent'")
 
+            if (endContent.startsWith("id:")) {
+                // Extract specific NPC ID
+                val npcId = endContent.substringAfter("id:").substringBefore("<").trim()
+                println("DEBUG TypingManager: Extracted npcId = '$npcId'")
+                if (npcId.isNotEmpty()) {
+                    // End specific session
+                    println("DEBUG TypingManager: Calling finishSessionForNpc for $npcId")
+                    finishSessionForNpc(npcId)
+                } else {
+                    // Fallback: end all sessions
+                    println("DEBUG TypingManager: Empty npcId, finishing all sessions")
+                    finishAllSessions()
+                }
+            } else {
+                // Old format or no ID: end all sessions
+                println("DEBUG TypingManager: No id: prefix, finishing all sessions")
+                finishAllSessions()
+            }
         }
     }
 
@@ -157,8 +208,16 @@ object TypingManager {
     }
 
     fun finishSessionForNpc(npcId: String) {
+        println("DEBUG TypingManager: finishSessionForNpc called for $npcId")
+        println("DEBUG TypingManager: useBubbleRenderer = ${StoryClientConfig.useBubbleRenderer}")
         activeSessions[npcId]?.markDone()
-        NPCDialogueHud.endDialogue(npcId) // Add this line to trigger fade-out
+        if (StoryClientConfig.useBubbleRenderer) {
+            println("DEBUG TypingManager: Calling BubbleRenderer.endBubble")
+            BubbleRenderer.endBubble(npcId)
+        } else {
+            println("DEBUG TypingManager: Calling NPCDialogueHud.endDialogue")
+            NPCDialogueHud.endDialogue(npcId)
+        }
     }
 
     fun finishAllSessions() {

@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.minecraft.client.MinecraftClient
 import net.minecraft.network.PacketByteBuf
@@ -15,11 +16,13 @@ import java.io.ByteArrayInputStream
 import javax.sound.sampled.*
 import javazoom.jl.player.Player
 import net.minecraft.sound.SoundCategory
+import kotlin.math.pow
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
         private var audioClip: Clip? = null
         private val chunkBuffer = mutableMapOf<String, ChunkData>()
+        private val activePositionalAudio = mutableMapOf<String, PositionalAudioPlayer>()
     }
 
     // Data class to hold chunked audio data
@@ -87,6 +90,11 @@ class NPCMessageParserClient : ClientModInitializer {
             TypingManager.tick()
         }
 
+        // Register world render event for BubbleRenderer
+        WorldRenderEvents.AFTER_ENTITIES.register { context ->
+            BubbleRenderer.render(context)
+        }
+
         // Fix Dialogue command (that removes session, removes buggy dialog box)
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(
@@ -96,6 +104,71 @@ class NPCMessageParserClient : ClientModInitializer {
                         // Remove the session
                         TypingManager.finishAllSessions()
                         NPCDialogueHud.endDialogue("a")
+                        BubbleRenderer.removeAllBubbles()
+
+                        1
+                    })
+
+            // Test dialogue command
+            dispatcher.register(
+                ClientCommandManager.literal("testdialogue")
+                    .executes { context ->
+                        val player = context.source.player
+                        val world = context.source.world
+
+                        // Find nearby entities
+                        val nearbyEntities = world.getOtherEntities(
+                            player,
+                            net.minecraft.util.math.Box.of(player.pos, 32.0, 32.0, 32.0)
+                        ) { entity ->
+                            entity is net.minecraft.entity.LivingEntity &&
+                            entity.isAlive
+                        }
+
+                        if (nearbyEntities.isEmpty()) {
+                            player.sendMessage(net.minecraft.text.Text.literal("No nearby entities found to test with!"), false)
+                            return@executes 0
+                        }
+
+                        // Pick a random entity
+                        val testEntity = nearbyEntities.random()
+                        val entityUuid = testEntity.uuidAsString
+                        val entityName = testEntity.name.string
+
+                        // Random dialogues for testing
+                        val dialogues = listOf(
+                            "Wizard Aldric:Greetings, traveler! *waves staff mysteriously* I sense great power within you.",
+                            "Alpha Wolf:The forest speaks of your arrival. *sniffs the air* You carry an interesting scent.",
+                            "Knight Commander:*salutes* Well met, adventurer! The realm needs heroes like you.",
+                            "Forest Sprite:*giggles and twirls* Oh my! A visitor! *sparkles appear* How delightful!",
+                            "Grumpy Goblin:Oi! What're you doing in me territory? *crosses arms* Better have a good reason!",
+                            "Wise Owl:*hoots softly* Whoo... whoo... The old stories tell of one such as you. *ruffles feathers*",
+                            "Ancient Dragon:Mortal... *smoke curls from nostrils* You dare approach my domain? Speak your purpose!",
+                            "Mysterious Merchant:*adjusts hood* Ah, a customer! *rubs hands together* I have... special wares for special people."
+                        )
+
+                        val randomDialogue = dialogues.random()
+                        val testColor = listOf("FFCC44", "88FF88", "FF8844", "8888FF", "FF88FF").random()
+
+                        // Simulate the server message format
+                        val simulatedMessage = "<npc_typing>color:#${testColor}id:${entityUuid}:${randomDialogue}<npc_typing_end>"
+
+                        player.sendMessage(
+                            net.minecraft.text.Text.literal("§aSimulating dialogue from: §e$entityName §7(UUID: ${entityUuid.take(8)}...)"),
+                            false
+                        )
+
+                        // Send to TypingManager
+                        TypingManager.onIncomingServerMessage(simulatedMessage)
+
+                        // Schedule end message after 5 seconds using a simple counter
+                        Thread {
+                            Thread.sleep(5000) // 5 seconds
+                            val endMessage = "<npc_typing_end>id:${entityUuid}"
+                            MinecraftClient.getInstance().execute {
+                                TypingManager.onIncomingServerMessage(endMessage)
+                            }
+                        }.start()
 
                         1
                     })
@@ -112,6 +185,10 @@ class NPCMessageParserClient : ClientModInitializer {
                 clip.close()
                 audioClip = null
             }
+
+            // Stop all positional audio
+            activePositionalAudio.values.forEach { it.stop() }
+            activePositionalAudio.clear()
         } catch (e: Exception) {
             println("❌ Error stopping current audio: ${e.message}")
             e.printStackTrace()
@@ -145,15 +222,35 @@ class NPCMessageParserClient : ClientModInitializer {
                 val audioDebugBytes = processedData.take(16).map { "%02X".format(it) }.joinToString(" ")
                 println("🔍 First 16 bytes of processed audio: $audioDebugBytes")
 
+                // Check if we should use positional audio
+                val npcUuid = if (StoryClientConfig.use3DAudio) {
+                    // Get the NPC UUID from the active typing session
+                    TypingManager.getActiveNpcUuid()
+                } else null
+
+                if (npcUuid != null) {
+                    println("🎯 Using 3D positional audio for NPC: $npcUuid")
+                } else if (StoryClientConfig.use3DAudio) {
+                    println("⚠️ 3D audio enabled but no active NPC found, using global playback")
+                }
+
                 // Try to detect the audio format
                 when {
                     isWAV(processedData) -> {
                         println("🎵 WAV format detected")
-                        playWAVAudio(processedData)
+                        if (npcUuid != null) {
+                            playPositionalWAV(processedData, npcUuid)
+                        } else {
+                            playWAVAudio(processedData)
+                        }
                     }
                     isMP3(processedData) -> {
                         println("🎵 MP3 format detected")
-                        playMP3Audio(processedData)
+                        if (npcUuid != null) {
+                            playPositionalMP3(processedData, npcUuid)
+                        } else {
+                            playMP3Audio(processedData)
+                        }
                     }
                     else -> {
                         println("🎵 Unknown format - trying as raw PCM with different configurations")
@@ -356,9 +453,9 @@ class NPCMessageParserClient : ClientModInitializer {
                         val minGain = gainControl.minimum
                         val maxGain = gainControl.maximum
 
-                        // Use exponential curve for better volume perception
-                        // This makes lower percentages more audible
-                        val adjustedVolume = volume * volume // Square the volume for better curve
+                        // Use a gentler curve: cubic root instead of square
+                        // This keeps lower volumes audible while still providing good range
+                        val adjustedVolume = volume.toDouble().pow(0.5) // Square root for gentler curve
                         minGain + (maxGain - minGain) * adjustedVolume.toFloat()
                     } else {
                         gainControl.minimum // Mute
@@ -433,6 +530,48 @@ class NPCMessageParserClient : ClientModInitializer {
             println("❌ Error in playMP3Audio: ${e.message}")
             e.printStackTrace()
         }
+    }
+
+    private fun playPositionalWAV(audioData: ByteArray, npcUuid: String) {
+        try {
+            println("🎵 Starting positional WAV playback for NPC: $npcUuid")
+
+            val audioInputStream = AudioSystem.getAudioInputStream(ByteArrayInputStream(audioData))
+            val format = audioInputStream.format
+
+            println("🎵 WAV Format: $format")
+
+            // Stop any existing audio for this NPC
+            activePositionalAudio[npcUuid]?.stop()
+
+            // Create and start positional audio player
+            val player = PositionalAudioPlayer(audioData, npcUuid, format)
+            activePositionalAudio[npcUuid] = player
+            player.start()
+
+            println("✅ Positional WAV playback started for NPC: $npcUuid")
+        } catch (e: Exception) {
+            println("❌ Error playing positional WAV: ${e.message}")
+            e.printStackTrace()
+            // Fallback to global playback
+            println("⚠️ Falling back to global WAV playback")
+            playWAVAudio(audioData)
+        }
+    }
+
+    private fun playPositionalMP3(audioData: ByteArray, npcUuid: String) {
+        // MP3 positional audio requires decoding to PCM first
+        // For now, fall back to global MP3 playback
+        println("⚠️ MP3 positional audio not yet fully supported, using global playback")
+        println("   (NPC UUID: $npcUuid)")
+        playMP3Audio(audioData)
+
+        // TODO: Implement MP3 decoding to PCM for positional playback
+        // This would require:
+        // 1. Decode MP3 to WAV/PCM using JLayer
+        // 2. Get the decoded PCM data as ByteArray
+        // 3. Create AudioFormat from decoded data
+        // 4. Use PositionalAudioPlayer with the PCM data
     }
 
     private fun skipID3Tags(audioData: ByteArray): ByteArray? {
@@ -520,8 +659,9 @@ class NPCMessageParserClient : ClientModInitializer {
                         val minGain = gainControl.minimum
                         val maxGain = gainControl.maximum
 
-                        // Use exponential curve for better volume perception
-                        val adjustedVolume = volume * volume // Square the volume for better curve
+                        // Use a gentler curve: square root instead of square
+                        // This keeps lower volumes audible while still providing good range
+                        val adjustedVolume = volume.toDouble().pow(0.5) // Square root for gentler curve
                         minGain + (maxGain - minGain) * adjustedVolume.toFloat()
                     } else {
                         gainControl.minimum // Mute
