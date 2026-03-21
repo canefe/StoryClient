@@ -15,241 +15,506 @@ import net.minecraft.util.math.Box
 import net.minecraft.util.math.Vec3d
 import org.joml.Matrix4f
 import org.joml.Quaternionf
+import java.util.Random
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.*
 
 object BubbleRenderer {
     private const val RENDER_DISTANCE = 32.0
-    private const val BOX_WIDTH = 250
+    private const val BOX_WIDTH = 195
     private const val PADDING = 12
     private const val LINE_SPACING = 1.0f
     private const val SCALE_FACTOR = 0.02f
 
-    private val activeBubbles = mutableMapOf<String, BubbleData>()
+    private const val FADE_IN_MS = 300L
+    private const val FADE_OUT_MS = 500L
 
-    data class BubbleData(
-        val npcId: String,
-        var entityId: Int?,
+    // ── Data model: separate queues for dialogue and actions ─────────
+
+    data class DialogueEntry(
         var text: String,
         var color: String?,
-        var isTyping: Boolean = true,
-        var endTime: Long = 0L, // Time when bubble should be removed
-        var shouldRemove: Boolean = false
+        var startTime: Long = System.currentTimeMillis(),
+        var endTime: Long = 0L,
+        var shouldRemove: Boolean = false,
     )
 
+    data class ActionEntry(
+        var text: String,
+        var color: String?,
+        var startTime: Long = System.currentTimeMillis(),
+        var endTime: Long = 0L,
+        var shouldRemove: Boolean = false,
+        var lastActionText: String? = null,
+    )
+
+    data class NPCBubbleState(
+        val npcId: String,
+        var entityId: Int?,
+        var dialogue: DialogueEntry? = null,
+        var action: ActionEntry? = null,
+        var parsedName: String = "",
+        var parsedAvatar: String? = null,
+    )
+
+    private val npcStates = ConcurrentHashMap<String, NPCBubbleState>()
+
+    // ── Public API ──────────────────────────────────────────────────
+
     fun startBubble(npcId: String, entityId: Int?, text: String, color: String? = null) {
-        
+        val state = npcStates.getOrPut(npcId) { NPCBubbleState(npcId, entityId) }
+        state.entityId = entityId ?: state.entityId
 
-        // Calculate removal time based on content
-        val vanishTime = calculateVanishTime(text)
-        val endTime = System.currentTimeMillis() + (vanishTime * 1000).toLong()
-
-        activeBubbles[npcId] = BubbleData(
-            npcId,
-            entityId,
-            text,
-            color,
-            isTyping = true,
-            endTime = endTime,
-            shouldRemove = true  // Auto-remove after timer
-        )
-
-        
+        val parsed = parseDialogue(text)
+        state.parsedName = parsed.name
+        state.parsedAvatar = parsed.avatar
+        routeToQueues(state, parsed.body, color)
     }
 
     fun updateBubble(npcId: String, text: String, color: String? = null) {
-        
+        val state = npcStates[npcId] ?: run {
+            startBubble(npcId, null, text, color)
+            return
+        }
 
-        activeBubbles[npcId]?.let {
-            it.text = text
-            it.color = color
+        val parsed = parseDialogue(text)
+        if (parsed.name.isNotEmpty()) state.parsedName = parsed.name
+        if (parsed.avatar != null) state.parsedAvatar = parsed.avatar
+        routeToQueues(state, parsed.body, color)
+    }
 
-            // Reset the removal timer on update
-            val vanishTime = calculateVanishTime(text)
-            it.endTime = System.currentTimeMillis() + (vanishTime * 1000).toLong()
-            it.shouldRemove = true
+    fun endBubble(npcId: String) {
+        val state = npcStates[npcId] ?: return
+        state.dialogue?.shouldRemove = true
+        state.action?.shouldRemove = true
+    }
 
-            
+    fun removeBubble(npcId: String) {
+        npcStates.remove(npcId)
+    }
+
+    fun removeAllBubbles() {
+        npcStates.clear()
+    }
+
+    private fun routeToQueues(state: NPCBubbleState, body: String, color: String?) {
+        val now = System.currentTimeMillis()
+        val dialogueText = stripActions(body)
+        val actionText = if (hasActions(body)) extractActionText(body) else null
+
+        // Update dialogue queue
+        if (dialogueText.isNotEmpty()) {
+            val vanishTime = calculateVanishTime(dialogueText)
+            val existing = state.dialogue
+            if (existing != null) {
+                existing.text = dialogueText
+                existing.color = color
+                existing.endTime = now + (vanishTime * 1000).toLong()
+                existing.shouldRemove = true
+            } else {
+                state.dialogue = DialogueEntry(
+                    text = dialogueText,
+                    color = color,
+                    startTime = now,
+                    endTime = now + (vanishTime * 1000).toLong(),
+                    shouldRemove = true,
+                )
+            }
+        }
+
+        // Update action queue
+        if (actionText != null) {
+            val vanishTime = calculateVanishTime(actionText)
+            val existing = state.action
+            if (existing != null && existing.lastActionText != actionText) {
+                // New action text — reset animation
+                existing.text = actionText
+                existing.color = color
+                existing.startTime = now
+                existing.endTime = now + (vanishTime * 1000).toLong()
+                existing.shouldRemove = true
+                existing.lastActionText = actionText
+            } else if (existing == null) {
+                state.action = ActionEntry(
+                    text = actionText,
+                    color = color,
+                    startTime = now,
+                    endTime = now + (vanishTime * 1000).toLong(),
+                    shouldRemove = true,
+                    lastActionText = actionText,
+                )
+            }
         }
     }
 
     private fun calculateVanishTime(text: String): Double {
-        // Calculate vanish time based on actual content length (not whitespace)
-        val actualContent = text
-            .lines()
-            .joinToString(" ") { it.trim() }
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
+        val actualContent = text.lines().joinToString(" ") { it.trim() }
+            .replace(Regex("\\s+"), " ").trim()
         val baseVanishTime = StoryClientConfig.messageVanishTime
-        val contentLength = actualContent.length
-
-        // Scale vanish time: min 3s, max 15s, based on content length
         return when {
-            contentLength < 50 -> maxOf(3.0, baseVanishTime * 0.6)
-            contentLength > 200 -> minOf(15.0, baseVanishTime * 1.5)
+            actualContent.length < 50 -> maxOf(3.0, baseVanishTime * 0.6)
+            actualContent.length > 200 -> minOf(15.0, baseVanishTime * 1.5)
             else -> baseVanishTime
         }
     }
 
-    fun endBubble(npcId: String) {
-        // This is called when the conversation ends (<npc_typing_end>)
-        // The bubble already has a timer set, so we just mark it as no longer typing
-        
-
-        activeBubbles[npcId]?.let { bubble ->
-            bubble.isTyping = false
-            // Timer is already set from startBubble/updateBubble
-            
+    private fun calculateAlpha(startTime: Long, endTime: Long, shouldRemove: Boolean): Float {
+        val now = System.currentTimeMillis()
+        val elapsed = now - startTime
+        if (elapsed < FADE_IN_MS) {
+            return (elapsed.toFloat() / FADE_IN_MS).coerceIn(0f, 1f)
         }
+        if (shouldRemove && endTime > 0) {
+            val remaining = endTime - now
+            if (remaining < FADE_OUT_MS) {
+                return (remaining.toFloat() / FADE_OUT_MS).coerceIn(0f, 1f)
+            }
+        }
+        return 1f
     }
 
-    fun removeBubble(npcId: String) {
-        activeBubbles.remove(npcId)
-    }
-
-    fun removeAllBubbles() {
-        activeBubbles.clear()
-    }
+    // ── Render ───────────────────────────────────────────────────────
 
     fun render(context: WorldRenderContext) {
         if (!StoryClientConfig.modEnabled) return
 
-        val camera = context.camera()
-        val cameraEntity = camera.focusedEntity ?: return
-        val world = cameraEntity.world
-        val cameraPos = camera.pos
+        try {
+            val camera = context.camera()
+            val cameraEntity = camera.focusedEntity ?: return
+            val world = cameraEntity.world
+            val cameraPos = camera.pos
+            val matrices = context.matrixStack() ?: return
+            val consumers = context.consumers() ?: return
+            val tickDelta = context.tickCounter()?.getTickDelta(false) ?: 1.0f
+            val currentTime = System.currentTimeMillis()
 
-        // Get required context objects with explicit null checks
-        val matrices = context.matrixStack()
-        val consumers = context.consumers()
-
-        if (matrices == null || consumers == null) return
-
-        // Get tick delta from context
-        val tickDelta = context.tickCounter()?.getTickDelta(false) ?: 1.0f
-
-        // Clean up expired bubbles
-        val currentTime = System.currentTimeMillis()
-        val bubblesToRemove = activeBubbles.filter { (npcId, bubble) ->
-            val shouldRemove = bubble.shouldRemove && currentTime >= bubble.endTime
-            if (bubble.shouldRemove) {
-                
+            // Cleanup expired entries
+            val snapshot = npcStates.entries.toList()
+            snapshot.forEach { (npcId, state) ->
+                val dialogueExpired = state.dialogue?.let { it.shouldRemove && currentTime >= it.endTime } ?: true
+                val actionExpired = state.action?.let { it.shouldRemove && currentTime >= it.endTime } ?: true
+                if (dialogueExpired) state.dialogue = null
+                if (actionExpired) state.action = null
+                if (state.dialogue == null && state.action == null) {
+                    npcStates.remove(npcId)
+                }
             }
-            shouldRemove
-        }.keys.toList()
 
-        if (bubblesToRemove.isNotEmpty()) {
-            
-        }
+            // Render each NPC's bubbles
+            npcStates.values.toList().forEach { state ->
+                val entity = findEntity(world, state, cameraEntity) ?: return@forEach
+                if (entity.squaredDistanceTo(cameraEntity) > RENDER_DISTANCE * RENDER_DISTANCE) return@forEach
 
-        bubblesToRemove.forEach { npcId ->
-            activeBubbles.remove(npcId)
-            
-        }
+                // Render action text (scattered around body)
+                state.action?.let { action ->
+                    renderScatteredActions(matrices, consumers, entity, state.npcId, action, cameraPos, tickDelta)
+                }
 
-        // Iterate through all active bubbles
-        activeBubbles.values.forEach { bubbleData ->
-            // Try to find the entity
-            val entity = findEntity(world, bubbleData, cameraEntity)
-
-            if (entity != null && entity.squaredDistanceTo(cameraEntity) <= RENDER_DISTANCE * RENDER_DISTANCE) {
-                renderBubble(matrices, consumers, entity, bubbleData, cameraPos, tickDelta)
+                // Render dialogue textbox (above head)
+                state.dialogue?.let { dialogue ->
+                    renderDialogueBubble(matrices, consumers, entity, state, dialogue, cameraPos, tickDelta)
+                }
             }
+        } catch (_: ConcurrentModificationException) {
+        } catch (_: Exception) {
         }
     }
 
-    private fun findEntity(world: net.minecraft.world.World, bubbleData: BubbleData, cameraEntity: Entity): Entity? {
-        // First try by entity ID if we have it
-        bubbleData.entityId?.let { id ->
+    private fun findEntity(world: net.minecraft.world.World, state: NPCBubbleState, cameraEntity: Entity): Entity? {
+        state.entityId?.let { id ->
             world.getEntityById(id)?.let { return it }
         }
-
-        // Fallback: search for entities with matching UUID or name
-        // This is a simplified approach - you may need to enhance this based on your server protocol
-        val searchBox = Box.of(cameraEntity.pos, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2)
-        val nearbyEntities = world.getOtherEntities(null, searchBox) {
-            it is LivingEntity
+        return try {
+            val searchBox = Box.of(cameraEntity.pos, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2)
+            val found = world.getOtherEntities(null, searchBox) {
+                it is LivingEntity && it.uuidAsString == state.npcId
+            }.firstOrNull()
+            found?.let { state.entityId = it.id }
+            found
+        } catch (_: ConcurrentModificationException) {
+            null
         }
-
-        // Try to match by UUID string in the npcId
-        return nearbyEntities.firstOrNull { it.uuidAsString == bubbleData.npcId }
     }
 
-    private fun renderBubble(
+    /**
+     * Returns true if the body has a trailing unclosed action (odd number of asterisks).
+     */
+    private fun hasPendingAction(body: String): Boolean {
+        return body.trim().count { it == '*' } % 2 != 0
+    }
+
+    /**
+     * Checks if the message body is purely an action (only asterisk-wrapped text, no dialogue).
+     * Also treats a trailing unclosed *text as a pending action.
+     */
+    private fun isActionOnly(body: String): Boolean {
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) return false
+        var stripped = trimmed.replace(Regex("\\*[^*]+\\*"), "") // completed actions
+        if (hasPendingAction(trimmed)) {
+            stripped = stripped.replace(Regex("\\*[^*]*$"), "")  // trailing unclosed action
+        }
+        return stripped.trim().isEmpty()
+    }
+
+    /**
+     * Extracts action text from asterisk-wrapped content, including pending unclosed actions.
+     */
+    private fun extractActionText(body: String): String {
+        val trimmed = body.trim()
+        val completed = Regex("\\*([^*]+)\\*").findAll(trimmed)
+            .map { it.groupValues[1].trim() }
+            .toList()
+
+        // Only treat trailing text as pending action if there's an odd number of asterisks
+        val pending = if (hasPendingAction(trimmed)) {
+            Regex("\\*([^*]+)$").find(trimmed)?.groupValues?.get(1)?.trim()
+        } else null
+
+        val all = if (pending != null) completed + pending else completed
+        return all.joinToString(" ").ifEmpty { trimmed }
+    }
+
+    /**
+     * Checks if the body contains any action text (completed or pending).
+     */
+    private fun hasActions(body: String): Boolean {
+        val trimmed = body.trim()
+        return Regex("\\*[^*]+\\*").containsMatchIn(trimmed) ||
+               hasPendingAction(trimmed)
+    }
+
+    /**
+     * Strips action text from body, leaving only dialogue.
+     * Also strips trailing unclosed actions.
+     */
+    private fun stripActions(body: String): String {
+        var stripped = body.replace(Regex("\\*[^*]+\\*"), "") // completed actions
+        if (hasPendingAction(body)) {
+            stripped = stripped.replace(Regex("\\*[^*]*$"), "") // trailing unclosed action
+        }
+        return stripped.trim()
+    }
+
+    /**
+     * Splits text into 2-word groups.
+     */
+    private fun splitIntoWordGroups(text: String, wordsPerGroup: Int = 2): List<String> {
+        val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return words.chunked(wordsPerGroup) { it.joinToString(" ") }
+    }
+
+    /**
+     * Renders action-only text as scattered word groups floating around the NPC's head.
+     * Each group is positioned at a different angle around the entity, with varying Y offset.
+     */
+    private fun renderScatteredActions(
         matrices: MatrixStack,
         consumers: VertexConsumerProvider,
         entity: Entity,
-        bubbleData: BubbleData,
+        npcId: String,
+        action: ActionEntry,
+        cameraPos: Vec3d,
+        tickDelta: Float
+    ) {
+        val wordGroups = splitIntoWordGroups(action.text)
+        if (wordGroups.isEmpty()) return
+
+        val textRenderer = MinecraftClient.getInstance().textRenderer
+        val nameColorValue = action.color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
+        val actionColorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
+        val entityPos = getInterpolatedPosition(entity, tickDelta)
+        val entityHeight = entity.height
+        val actionScale = SCALE_FACTOR * StoryClientConfig.dialogueScale.toFloat() * 1.4f
+
+        // Use a seed based on npcId so positions are stable per-NPC but vary between NPCs
+        val seed = npcId.hashCode().toLong()
+        val rng = Random(seed)
+
+        // Anchor at the NPC's mid-body height
+        val anchorPos = entityPos.add(0.0, (entityHeight * 0.5).toDouble(), 0.0)
+
+        // Billboard direction: calculate once for consistent side placement
+        val difference = cameraPos.subtract(anchorPos)
+        val yaw = -(atan2(difference.z, difference.x) + PI / 2.0)
+        val horizontalDistance = sqrt(difference.x * difference.x + difference.z * difference.z)
+        val pitch = atan2(difference.y, horizontalDistance)
+
+        // Pre-generate random values so iteration order doesn't matter
+        val tilts = wordGroups.indices.map { (rng.nextDouble() * 20.0 - 10.0).toFloat() }
+        val yVariations = wordGroups.indices.map { (rng.nextDouble() * 8.0 - 4.0).toFloat() }
+
+        // Staggered pop-up animation timing
+        val now = System.currentTimeMillis()
+        val staggerDelayMs = 350L  // Delay between each word group appearing
+        val popDurationMs = 450L   // How long the scale-up animation takes
+
+        // Alternate word groups between left and right side of the body
+        for ((i, group) in wordGroups.withIndex()) {
+            // Calculate animation progress for this group
+            val groupStartTime = action.startTime + (i * staggerDelayMs)
+            val elapsed = now - groupStartTime
+            if (elapsed < 0) continue // Not yet visible
+
+            // Scale easing: overshoot then settle (pop effect)
+            val rawProgress = (elapsed.toFloat() / popDurationMs).coerceIn(0f, 1f)
+            val popScale = if (rawProgress < 1f) {
+                // Overshoot ease-out: goes to ~1.15 then settles to 1.0
+                val t = rawProgress
+                val overshoot = 1.15f
+                1f - (1f - t) * (1f - t) * (1f - overshoot * t)
+            } else {
+                1f
+            }
+
+            if (popScale <= 0.01f) continue
+
+            matrices.push()
+
+            // Alternate sides: even indices go left, odd go right
+            val side = if (i % 2 == 0) -1.0 else 1.0
+
+            // Vertical spread: distribute groups along the body height, top-to-bottom reading order
+            val yFraction = (i.toFloat() / maxOf(wordGroups.size - 1, 1)) // 0.0 to 1.0
+            val yPos = entityHeight * (1.0 - yFraction * 0.7) // top ~100% down to ~30% of body height
+
+            val groupPos = anchorPos.add(
+                0.0,
+                yPos.toDouble() - (entityHeight * 0.5).toDouble() + yVariations[i] * 0.02,
+                0.0
+            )
+
+            // Translate to group position relative to camera
+            matrices.translate(
+                groupPos.x - cameraPos.x,
+                groupPos.y - cameraPos.y,
+                groupPos.z - cameraPos.z
+            )
+
+            // Billboard: face camera
+            matrices.multiply(Quaternionf().rotationY(yaw.toFloat()))
+            matrices.multiply(Quaternionf().rotationX(pitch.toFloat()))
+
+            // Slight Z-rotation tilt per group
+            val tilt = tilts[i]
+            matrices.multiply(Quaternionf().rotationZ(Math.toRadians(tilt.toDouble()).toFloat()))
+
+            // Apply pop scale animation
+            val animatedScale = actionScale * popScale
+            matrices.scale(-animatedScale, -animatedScale, animatedScale)
+
+            val displayText = Text.literal(group)
+                .styled { it.withItalic(true).withColor(actionColorRgb) }
+
+            val textWidth = textRenderer.getWidth(displayText)
+
+            // Position on the left or right side in screen-space
+            val xPixelOffset = (side * (textWidth / 2f + 30f)).toFloat()
+
+            // Fade in alpha alongside the scale
+            val alphaInt = (rawProgress.coerceIn(0f, 1f) * 255).toInt()
+            val textColor = (alphaInt shl 24) or actionColorRgb
+
+            textRenderer.draw(
+                displayText,
+                -textWidth / 2f + xPixelOffset,
+                yVariations[i],
+                textColor,
+                false,
+                matrices.peek().positionMatrix,
+                consumers,
+                TextRenderer.TextLayerType.SEE_THROUGH,
+                0,
+                15728880
+            )
+
+            matrices.pop()
+        }
+    }
+
+    private fun renderDialogueBubble(
+        matrices: MatrixStack,
+        consumers: VertexConsumerProvider,
+        entity: Entity,
+        state: NPCBubbleState,
+        dialogue: DialogueEntry,
         cameraPos: Vec3d,
         tickDelta: Float
     ) {
         matrices.push()
 
-        // Get entity position with interpolation
         val entityPos = getInterpolatedPosition(entity, tickDelta)
         val entityHeight = entity.height
-        val paddingAboveEntity = 0.4
+        val bubblePos = entityPos.add(0.0, entityHeight.toDouble() + 0.4, 0.0)
 
-        // Position bubble above entity
-        val bubblePos = entityPos.add(0.0, entityHeight.toDouble() + paddingAboveEntity, 0.0)
-
-        // Translate to bubble position relative to camera
         matrices.translate(
             bubblePos.x - cameraPos.x,
             bubblePos.y - cameraPos.y,
             bubblePos.z - cameraPos.z
         )
 
-        // Calculate rotation to face camera
         val difference = cameraPos.subtract(bubblePos)
         val yaw = -(atan2(difference.z, difference.x) + PI / 2.0)
         val horizontalDistance = sqrt(difference.x * difference.x + difference.z * difference.z)
         val pitch = atan2(difference.y, horizontalDistance)
 
-        // Apply yaw rotation
-        val yawQuat = Quaternionf().rotationY(yaw.toFloat())
-        matrices.multiply(yawQuat)
+        matrices.multiply(Quaternionf().rotationY(yaw.toFloat()))
+        matrices.multiply(Quaternionf().rotationX(pitch.toFloat()))
 
-        // Apply pitch rotation
-        val pitchQuat = Quaternionf().rotationX(pitch.toFloat())
-        matrices.multiply(pitchQuat)
-
-        // Scale based on config
         val scale = SCALE_FACTOR * StoryClientConfig.dialogueScale.toFloat()
         matrices.scale(-scale, -scale, scale)
 
-        // Parse and prepare text
-        val parsedData = parseDialogue(bubbleData.text)
         val textRenderer = MinecraftClient.getInstance().textRenderer
-
-        // Build formatted text
-        val formattedText = buildFormattedText(parsedData.body)
+        val formattedText = buildFormattedText(dialogue.text)
         val wrappedLines = textRenderer.wrapLines(formattedText, BOX_WIDTH - PADDING * 2)
 
-        // Calculate dimensions
-        //val widest = wrappedLines.maxOfOrNull { textRenderer.getWidth(it) } ?: 0
-        val widest = 200
+        val widest = wrappedLines.maxOfOrNull { textRenderer.getWidth(it) } ?: 0
         val boxWidth = max(BOX_WIDTH, widest + PADDING * 2)
         val lineHeight = textRenderer.fontHeight
         val boxHeight = max(50, PADDING * 2 + (wrappedLines.size * lineHeight))
 
-        // Center the box
         val x = -boxWidth / 2
-        val y = -boxHeight - 10 // Offset above entity
+        val y = -boxHeight - 10
 
-        // Move text box up
         matrices.translate(0f, y.toFloat(), 0f)
 
-        // Render the bubble
-        renderBubbleBackground(matrices, boxWidth, boxHeight, bubbleData.color)
-
-        // Render NPC name
-        if (parsedData.name.isNotEmpty()) {
-            renderNPCName(matrices, consumers, textRenderer, parsedData.name, parsedData.avatar, x, -15, bubbleData.color)
+        val alpha = calculateAlpha(dialogue.startTime, dialogue.endTime, dialogue.shouldRemove)
+        if (alpha <= 0f) {
+            matrices.pop()
+            return
         }
 
-        // Render text
-        renderText(matrices, consumers, textRenderer, wrappedLines, x, 0, boxWidth, boxHeight)
+        renderRoundedBackground(matrices, boxWidth, boxHeight, dialogue.color, alpha)
+        matrices.translate(0f, 0f, -0.1f)
+
+        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
+        val textAlpha = alphaInt shl 24
+
+        // Render avatar outside the box, to its left
+        if (state.parsedAvatar != null) {
+            val avatarText = Text.literal(state.parsedAvatar)
+            val avatarWidth = textRenderer.getWidth(avatarText)
+            val avatarHeight = 42
+            val avatarX = x - avatarWidth - 8
+            val avatarY = (boxHeight - avatarHeight) / 2
+
+            val nameColorValue = dialogue.color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
+            val colorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
+
+            renderAvatarFrame(matrices, avatarX - 2, avatarY - 4, avatarWidth + 4, avatarHeight + 8, colorRgb, alpha)
+            textRenderer.draw(
+                avatarText, avatarX.toFloat(), avatarY.toFloat(),
+                textAlpha or 0xFFFFFF, false,
+                matrices.peek().positionMatrix, consumers,
+                TextRenderer.TextLayerType.NORMAL, 0, 15728880
+            )
+        }
+
+        if (state.parsedName.isNotEmpty()) {
+            renderNPCName(matrices, consumers, textRenderer, state.parsedName, null, x, -15, dialogue.color, alpha)
+        }
+
+        renderText(matrices, consumers, textRenderer, wrappedLines, x, 0, boxWidth, boxHeight, alpha)
 
         matrices.pop()
     }
@@ -355,10 +620,9 @@ object BubbleRenderer {
         return formatted
     }
 
-    private fun renderBubbleBackground(matrices: MatrixStack, boxWidth: Int, boxHeight: Int, color: String?) {
+    private fun renderRoundedBackground(matrices: MatrixStack, boxWidth: Int, boxHeight: Int, color: String?, alpha: Float = 1f) {
         val matrix = matrices.peek().positionMatrix
 
-        // Set up rendering with proper depth testing
         RenderSystem.enableBlend()
         RenderSystem.defaultBlendFunc()
         RenderSystem.enableDepthTest()
@@ -376,43 +640,63 @@ object BubbleRenderer {
 
         // Border color
         val borderColor = 0xB86A2F
-        val borderR = ((borderColor shr 16) and 0xFF) / 255f
-        val borderG = ((borderColor shr 8) and 0xFF) / 255f
-        val borderB = (borderColor and 0xFF) / 255f
+        val bR = ((borderColor shr 16) and 0xFF) / 255f
+        val bG = ((borderColor shr 8) and 0xFF) / 255f
+        val bB = (borderColor and 0xFF) / 255f
 
         val x = -boxWidth / 2f
         val y = 0f
-        val z = 0.01f  // Use positive Z for proper depth testing
+        val bgZ = 0.5f   // Background layer (further from camera)
+        val brZ = 0.3f   // Border layer (closer to camera, in front of background)
+        val w = boxWidth.toFloat()
+        val h = boxHeight.toFloat()
+        val r = 4f // corner radius
+        val b = 2f // border thickness
 
-        // Main background
-        bufferBuilder.vertex(matrix, x, y + boxHeight, z).color(bgR, bgG, bgB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y + boxHeight, z).color(bgR, bgG, bgB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y, z).color(bgR, bgG, bgB, 1f)
-        bufferBuilder.vertex(matrix, x, y, z).color(bgR, bgG, bgB, 1f)
+        // Helper to draw a filled rect at a specific z
+        fun fill(x1: Float, y1: Float, x2: Float, y2: Float, cr: Float, cg: Float, cb: Float, z: Float) {
+            bufferBuilder.vertex(matrix, x1, y2, z).color(cr, cg, cb, alpha)
+            bufferBuilder.vertex(matrix, x2, y2, z).color(cr, cg, cb, alpha)
+            bufferBuilder.vertex(matrix, x2, y1, z).color(cr, cg, cb, alpha)
+            bufferBuilder.vertex(matrix, x1, y1, z).color(cr, cg, cb, alpha)
+        }
 
-        // Top border
-        bufferBuilder.vertex(matrix, x, y + 3, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y + 3, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x, y, z).color(borderR, borderG, borderB, 1f)
+        // Main background (inset by corner radius to leave room for rounded corners)
+        // Horizontal strip (full width, excluding top/bottom corner rows)
+        fill(x, y + r, x + w, y + h - r, bgR, bgG, bgB, bgZ)
+        // Top strip (excluding corners)
+        fill(x + r, y, x + w - r, y + r, bgR, bgG, bgB, bgZ)
+        // Bottom strip (excluding corners)
+        fill(x + r, y + h - r, x + w - r, y + h, bgR, bgG, bgB, bgZ)
 
-        // Bottom border
-        bufferBuilder.vertex(matrix, x, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y + boxHeight - 3, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x, y + boxHeight - 3, z).color(borderR, borderG, borderB, 1f)
+        // Corner fills (small squares to approximate rounded corners)
+        fill(x + 1, y + 1, x + r, y + r, bgR, bgG, bgB, bgZ)
+        fill(x + w - r, y + 1, x + w - 1, y + r, bgR, bgG, bgB, bgZ)
+        fill(x + 1, y + h - r, x + r, y + h - 1, bgR, bgG, bgB, bgZ)
+        fill(x + w - r, y + h - r, x + w - 1, y + h - 1, bgR, bgG, bgB, bgZ)
 
-        // Left border
-        bufferBuilder.vertex(matrix, x, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + 3, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + 3, y, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x, y, z).color(borderR, borderG, borderB, 1f)
+        // Border — top edge (between corners)
+        fill(x + r, y, x + w - r, y + b, bR, bG, bB, brZ)
+        // Border — bottom edge
+        fill(x + r, y + h - b, x + w - r, y + h, bR, bG, bB, brZ)
+        // Border — left edge
+        fill(x, y + r, x + b, y + h - r, bR, bG, bB, brZ)
+        // Border — right edge
+        fill(x + w - b, y + r, x + w, y + h - r, bR, bG, bB, brZ)
 
-        // Right border
-        bufferBuilder.vertex(matrix, x + boxWidth - 3, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y + boxHeight, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth, y, z).color(borderR, borderG, borderB, 1f)
-        bufferBuilder.vertex(matrix, x + boxWidth - 3, y, z).color(borderR, borderG, borderB, 1f)
+        // Rounded corner borders (L-shaped pieces)
+        // Top-left
+        fill(x + 1, y, x + r, y + b, bR, bG, bB, brZ)
+        fill(x, y + 1, x + b, y + r, bR, bG, bB, brZ)
+        // Top-right
+        fill(x + w - r, y, x + w - 1, y + b, bR, bG, bB, brZ)
+        fill(x + w - b, y + 1, x + w, y + r, bR, bG, bB, brZ)
+        // Bottom-left
+        fill(x + 1, y + h - b, x + r, y + h, bR, bG, bB, brZ)
+        fill(x, y + h - r, x + b, y + h - 1, bR, bG, bB, brZ)
+        // Bottom-right
+        fill(x + w - r, y + h - b, x + w - 1, y + h, bR, bG, bB, brZ)
+        fill(x + w - b, y + h - r, x + w, y + h - 1, bR, bG, bB, brZ)
 
         BufferRenderer.drawWithGlobalProgram(bufferBuilder.end())
 
@@ -428,12 +712,14 @@ object BubbleRenderer {
         avatar: String?,
         x: Int,
         y: Int,
-        color: String?
+        color: String?,
+        alpha: Float = 1f
     ) {
         val nameText = Text.literal(name).styled { it.withBold(true) }
         val nameColorValue = color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
         val colorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
-        val colorWithAlpha = 0xFF000000.toInt() or colorRgb
+        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
+        val colorWithAlpha = (alphaInt shl 24) or colorRgb
 
         // Render avatar if present
         if (avatar != null) {
@@ -441,25 +727,21 @@ object BubbleRenderer {
             val avatarWidth = textRenderer.getWidth(avatarText)
             val avatarHeight = 42
 
-            // Position calculations
             val avatarX = x + 2
             val avatarY = y - avatarHeight - 5
 
-            // Frame dimensions
             val frameX = avatarX - 2
             val frameY = avatarY - 4
             val frameWidth = avatarWidth + 4
             val frameHeight = avatarHeight + 8
 
-            // Render decorative frame corners
-            renderAvatarFrame(matrices, frameX, frameY, frameWidth, frameHeight, colorRgb)
+            renderAvatarFrame(matrices, frameX, frameY, frameWidth, frameHeight, colorRgb, alpha)
 
-            // Draw the avatar text
             textRenderer.draw(
                 avatarText,
                 avatarX.toFloat(),
                 avatarY.toFloat(),
-                0xFFFFFFFF.toInt(),
+                (alphaInt shl 24) or 0xFFFFFF,
                 false,
                 matrices.peek().positionMatrix,
                 consumers,
@@ -490,7 +772,8 @@ object BubbleRenderer {
         frameY: Int,
         frameWidth: Int,
         frameHeight: Int,
-        colorRgb: Int
+        colorRgb: Int,
+        alpha: Float = 1f
     ) {
         val matrix = matrices.peek().positionMatrix
 
@@ -507,9 +790,8 @@ object BubbleRenderer {
         val r = ((colorRgb shr 16) and 0xFF) / 255f
         val g = ((colorRgb shr 8) and 0xFF) / 255f
         val b = (colorRgb and 0xFF) / 255f
-        val a = 1f
 
-        val z = 0.01f
+        val z = 0.5f  // Match background depth
 
         // Helper function to draw a filled rectangle
         fun fillRect(x1: Int, y1: Int, x2: Int, y2: Int) {
@@ -518,10 +800,10 @@ object BubbleRenderer {
             val fx2 = x2.toFloat()
             val fy2 = y2.toFloat()
 
-            bufferBuilder.vertex(matrix, fx1, fy2, z).color(r, g, b, a)
-            bufferBuilder.vertex(matrix, fx2, fy2, z).color(r, g, b, a)
-            bufferBuilder.vertex(matrix, fx2, fy1, z).color(r, g, b, a)
-            bufferBuilder.vertex(matrix, fx1, fy1, z).color(r, g, b, a)
+            bufferBuilder.vertex(matrix, fx1, fy2, z).color(r, g, b, alpha)
+            bufferBuilder.vertex(matrix, fx2, fy2, z).color(r, g, b, alpha)
+            bufferBuilder.vertex(matrix, fx2, fy1, z).color(r, g, b, alpha)
+            bufferBuilder.vertex(matrix, fx1, fy1, z).color(r, g, b, alpha)
         }
 
         // Top left corner
@@ -558,9 +840,11 @@ object BubbleRenderer {
         x: Int,
         y: Int,
         boxWidth: Int,
-        boxHeight: Int
+        boxHeight: Int,
+        alpha: Float = 1f
     ) {
-        val textColor = 0x52130A
+        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
+        val textColor = (alphaInt shl 24) or 0x52130A
         val fullBright = 15728880
 
         var textY = y + PADDING

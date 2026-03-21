@@ -254,22 +254,18 @@ class PositionalAudioPlayer(
      * Finds an entity by UUID within hearing distance
      */
     private fun findEntityByUuid(uuid: String): Entity? {
-        return try {
-            val client = MinecraftClient.getInstance()
-            val player = client.player ?: return null
-            val world = client.world ?: return null
+        val client = MinecraftClient.getInstance()
+        val player = client.player ?: return null
+        val world = client.world ?: return null
 
-            val searchBox = Box.of(
-                player.pos,
-                maxDistance * 2, maxDistance * 2, maxDistance * 2
-            )
+        val searchBox = Box.of(
+            player.pos,
+            maxDistance * 2, maxDistance * 2, maxDistance * 2
+        )
 
-            world.getOtherEntities(null, searchBox) {
-                it.uuidAsString == uuid
-            }.firstOrNull()
-        } catch (_: ConcurrentModificationException) {
-            null
-        }
+        return world.getOtherEntities(null, searchBox) {
+            it.uuidAsString == uuid
+        }.firstOrNull()
     }
 
     /**

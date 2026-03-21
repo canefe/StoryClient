@@ -13,7 +13,6 @@ import net.minecraft.network.codec.PacketCodec
 import net.minecraft.network.packet.CustomPayload
 import net.minecraft.util.Identifier
 import java.io.ByteArrayInputStream
-import java.util.ConcurrentModificationException
 import javax.sound.sampled.*
 import javazoom.jl.player.Player
 import net.minecraft.sound.SoundCategory
@@ -119,16 +118,12 @@ class NPCMessageParserClient : ClientModInitializer {
                         val world = context.source.world
 
                         // Find nearby entities
-                        val nearbyEntities = try {
-                            world.getOtherEntities(
-                                player,
-                                net.minecraft.util.math.Box.of(player.pos, 32.0, 32.0, 32.0)
-                            ) { entity ->
-                                entity is net.minecraft.entity.LivingEntity &&
-                                entity.isAlive
-                            }
-                        } catch (_: ConcurrentModificationException) {
-                            emptyList()
+                        val nearbyEntities = world.getOtherEntities(
+                            player,
+                            net.minecraft.util.math.Box.of(player.pos, 32.0, 32.0, 32.0)
+                        ) { entity ->
+                            entity is net.minecraft.entity.LivingEntity &&
+                            entity.isAlive
                         }
 
                         if (nearbyEntities.isEmpty()) {

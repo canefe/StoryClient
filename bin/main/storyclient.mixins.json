@@ -3,11 +3,7 @@
   "minVersion": "0.8",
   "package": "com.canefe.storyclient.client.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": [
-    "ChatHudAccessor",
-    "ClientConnectionMixin",
-    "ClientPlayNetworkHandlerMixin",
-    "TextSerializationAccessor"
+  "mixins": [
   ],
   "injectors": {
     "defaultRequire": 1

@@ -4,7 +4,6 @@ import com.canefe.storyclient.client.mixin.ChatHudAccessor
 import net.kyori.adventure.platform.fabric.impl.client.ClientAudience
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
-import java.util.ConcurrentModificationException
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.hud.ChatHudLine
 import net.minecraft.text.Text
@@ -12,10 +11,10 @@ import kotlin.collections.iterator
 import kotlin.text.contains
 
 object TypingManager {
-    private val activeSessions = java.util.concurrent.ConcurrentHashMap<String, TypingSession>()
+    private val activeSessions: MutableMap<String, TypingSession> = mutableMapOf()
     private val cleanupTimeout = 10000L // 10 seconds for complete cleanup
-    private val sessionLastSeen = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    private val npcMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val sessionLastSeen: MutableMap<String, Long> = mutableMapOf()
+    private val npcMessages = mutableMapOf<String, String>()
 
     fun hasActiveSession(): Boolean = activeSessions.isNotEmpty()
 
@@ -28,50 +27,42 @@ object TypingManager {
     fun getActiveNpcUuid(): String? = activeSessions.keys.firstOrNull()
 
     private fun parseAndDisplayNpcMessage(npcId: String, text: String, color: String? = null) {
-        // Capture whether this is a new session before deferring to the main thread,
-        // since the session will be created on the Netty thread before execute {} fires
-        val isNew = !activeSessions.containsKey(npcId)
+        // Find entity ID by searching for entities near the player
+        val entityId = findNpcEntityId(npcId)
 
-        // Schedule on the main client thread to avoid ConcurrentModificationException
-        // from accessing world entities on the Netty thread
-        MinecraftClient.getInstance().execute {
-            val entityId = findNpcEntityId(npcId)
-
-            if (isNew) {
-                if (StoryClientConfig.useBubbleRenderer) {
-                    BubbleRenderer.startBubble(npcId, entityId, text, color)
-                } else {
-                    NPCDialogueHud.startDialogue(npcId, text, color)
-                }
+        if (npcId !in activeSessions) {
+            if (StoryClientConfig.useBubbleRenderer) {
+                BubbleRenderer.startBubble(npcId, entityId, text, color)
             } else {
-                if (StoryClientConfig.useBubbleRenderer) {
-                    BubbleRenderer.updateBubble(npcId, text, color)
-                } else {
-                    NPCDialogueHud.updateDialogue(npcId, text, color)
-                }
+                NPCDialogueHud.startDialogue(npcId, text, color)
+            }
+        } else {
+            if (StoryClientConfig.useBubbleRenderer) {
+                BubbleRenderer.updateBubble(npcId, text, color)
+            } else {
+                NPCDialogueHud.updateDialogue(npcId, text, color)
             }
         }
     }
 
     private fun findNpcEntityId(npcId: String): Int? {
-        return try {
-            val client = MinecraftClient.getInstance()
-            val player = client.player ?: return null
-            val world = client.world ?: return null
+        val client = MinecraftClient.getInstance()
+        val player = client.player ?: return null
+        val world = client.world ?: return null
 
-            val searchBox = net.minecraft.util.math.Box.of(
-                player.pos,
-                64.0, 64.0, 64.0
-            )
+        // Search for nearby entities that might match this NPC
+        val searchBox = net.minecraft.util.math.Box.of(
+            player.pos,
+            64.0, 64.0, 64.0
+        )
 
-            world.getOtherEntities(null, searchBox) {
-                it is net.minecraft.entity.LivingEntity &&
-                !it.isPlayer &&
-                it.uuidAsString == npcId
-            }.firstOrNull()?.id
-        } catch (_: Exception) {
-            null
+        val nearbyEntities = world.getOtherEntities(null, searchBox) {
+            it is net.minecraft.entity.LivingEntity &&
+            !it.isPlayer &&
+            it.uuidAsString == npcId
         }
+
+        return nearbyEntities.firstOrNull()?.id
     }
 
     fun onIncomingServerMessage(rawText: String) {
@@ -164,7 +155,7 @@ object TypingManager {
         val parsedText = parseMiniMessage(text)
 
         client.execute {
-            if (!npcMessages.containsKey(npcId)) {
+            if (npcId !in npcMessages) {
                 // First message for this NPC
                 chatHud.addMessage(parsedText)
                 npcMessages[npcId] = text
@@ -230,8 +221,7 @@ object TypingManager {
     }
 
     fun finishAllSessions() {
-        val keys = activeSessions.keys.toList()
-        for (npcId in keys) {
+        for (npcId in activeSessions.keys) {
             finishSessionForNpc(npcId)
         }
         activeSessions.clear()
@@ -241,8 +231,8 @@ object TypingManager {
         val now = System.currentTimeMillis()
         val finishedSessions = mutableListOf<String>()
 
-        // Check active sessions (snapshot to avoid ConcurrentModificationException)
-        for ((npcId, session) in activeSessions.toMap()) {
+        // Check active sessions
+        for ((npcId, session) in activeSessions) {
             session.tick()
 
             if (session.isComplete()) {
@@ -255,10 +245,10 @@ object TypingManager {
             activeSessions.remove(npcId)
         }
 
-        // Clean up sessions that haven't been seen in a while (snapshot)
-        val outdatedSessions = sessionLastSeen.entries.toList()
+        // Clean up sessions that haven't been seen in a while
+        val outdatedSessions = sessionLastSeen.entries
             .filter { (npcId, lastSeen) ->
-                now - lastSeen > cleanupTimeout && activeSessions.containsKey(npcId)
+                now - lastSeen > cleanupTimeout && npcId in activeSessions
             }
             .map { it.key }
 
