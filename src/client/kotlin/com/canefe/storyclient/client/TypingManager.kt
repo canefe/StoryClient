@@ -17,6 +17,18 @@ object TypingManager {
     private val sessionLastSeen = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val npcMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    // Voice sync: holds dialogue display until voice arrives
+    private data class PendingDialogue(
+        val npcId: String,
+        val text: String,
+        val color: String?,
+        val isNew: Boolean,
+        val timestamp: Long = System.currentTimeMillis(),
+    )
+
+    private val pendingVoiceDialogues = java.util.concurrent.ConcurrentHashMap<String, PendingDialogue>()
+    private const val VOICE_WAIT_TIMEOUT_MS = 3000L // Display dialogue after 3s even without voice
+
     fun hasActiveSession(): Boolean = activeSessions.isNotEmpty()
 
     fun getActiveSessionText(): String? {
@@ -27,13 +39,19 @@ object TypingManager {
 
     fun getActiveNpcUuid(): String? = activeSessions.keys.firstOrNull()
 
-    private fun parseAndDisplayNpcMessage(npcId: String, text: String, color: String? = null) {
-        // Capture whether this is a new session before deferring to the main thread,
-        // since the session will be created on the Netty thread before execute {} fires
+    private fun parseAndDisplayNpcMessage(npcId: String, text: String, color: String? = null, voicePending: Boolean = false) {
         val isNew = !activeSessions.containsKey(npcId)
 
-        // Schedule on the main client thread to avoid ConcurrentModificationException
-        // from accessing world entities on the Netty thread
+        if (voicePending) {
+            // Hold dialogue — wait for voice to arrive before displaying
+            pendingVoiceDialogues[npcId] = PendingDialogue(npcId, text, color, isNew)
+            return
+        }
+
+        displayNpcMessage(npcId, text, color, isNew)
+    }
+
+    private fun displayNpcMessage(npcId: String, text: String, color: String?, isNew: Boolean) {
         MinecraftClient.getInstance().execute {
             val entityId = findNpcEntityId(npcId)
 
@@ -51,6 +69,15 @@ object TypingManager {
                 }
             }
         }
+    }
+
+    /**
+     * Called when audio arrives for an NPC. If there's a pending dialogue waiting
+     * for voice, display it now.
+     */
+    fun onVoiceReceived(npcId: String) {
+        val pending = pendingVoiceDialogues.remove(npcId) ?: return
+        displayNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
     }
 
     private fun findNpcEntityId(npcId: String): Int? {
@@ -84,11 +111,15 @@ object TypingManager {
 
             // Check if tagContent contains color information
             if (tagContent.startsWith("color:")) {
-                // New format: color:#123456id:uuid:message
-                val colorEndIndex = tagContent.indexOf("id:")
+                // Format: color:#123456 voice:1 id:uuid:message
+                // or:     color:#123456 id:uuid:message (no voice flag)
+                val colorEndIndex = tagContent.indexOf(" id:")
                 if (colorEndIndex > 0) {
-                    val color = tagContent.substring(6, colorEndIndex) // Extract color code
-                    val remainingContent = tagContent.substring(colorEndIndex + 3) // Get content after "id:"
+                    val headerSection = tagContent.substring(6, colorEndIndex) // e.g. "#CC7B3D voice:1" or "#CC7B3D"
+                    val voicePending = headerSection.contains("voice:1")
+                    val color = headerSection.replace(" voice:1", "").trim()
+
+                    val remainingContent = tagContent.substring(colorEndIndex + 4) // Get content after " id:"
 
                     // Split to get NPC ID and message content
                     val parts = remainingContent.split(":", limit = 2)
@@ -99,8 +130,8 @@ object TypingManager {
                         val now = System.currentTimeMillis()
                         sessionLastSeen[npcId] = now
 
-                        // Pass color information to the dialogue system
-                        parseAndDisplayNpcMessage(npcId, newText, color)
+                        // Pass color and voice flag to the dialogue system
+                        parseAndDisplayNpcMessage(npcId, newText, color, voicePending)
 
                         val session = activeSessions.getOrPut(npcId) {
                             TypingSession(newText)
@@ -265,6 +296,14 @@ object TypingManager {
         for (npcId in outdatedSessions) {
             finishSessionForNpc(npcId)
             sessionLastSeen.remove(npcId)
+        }
+
+        // Timeout pending voice dialogues — display them even without voice
+        val timedOut = pendingVoiceDialogues.entries.toList()
+            .filter { (_, pending) -> now - pending.timestamp > VOICE_WAIT_TIMEOUT_MS }
+        for ((npcId, pending) in timedOut) {
+            pendingVoiceDialogues.remove(npcId)
+            displayNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
         }
     }
 }

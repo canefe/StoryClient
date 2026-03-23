@@ -415,21 +415,56 @@ object BubbleRenderer {
             val alphaInt = (rawProgress.coerceIn(0f, 1f) * 255).toInt()
             val textColor = (alphaInt shl 24) or actionColorRgb
 
-            textRenderer.draw(
-                displayText,
-                -textWidth / 2f + xPixelOffset,
-                yVariations[i],
-                textColor,
-                false,
-                matrices.peek().positionMatrix,
-                consumers,
-                TextRenderer.TextLayerType.SEE_THROUGH,
-                0,
-                15728880
+            val textX = -textWidth / 2f + xPixelOffset
+            val textY = yVariations[i]
+            val bgAlphaInt = (rawProgress.coerceIn(0f, 1f) * 140).toInt()
+            val bgColor = (bgAlphaInt shl 24)
+
+            drawOutlinedText(
+                textRenderer, displayText, textX, textY, textColor,
+                matrices.peek().positionMatrix, consumers, bgColor,
             )
 
             matrices.pop()
         }
+    }
+
+    /**
+     * Renders text with a white outline by drawing it offset in 4 directions, then the main text on top.
+     */
+    private fun drawOutlinedText(
+        textRenderer: TextRenderer,
+        text: Text,
+        x: Float,
+        y: Float,
+        color: Int,
+        matrix: Matrix4f,
+        consumers: VertexConsumerProvider,
+        bgColor: Int = 0,
+        light: Int = 15728880,
+    ) {
+        val alpha = ((color ushr 24) and 0xFF)
+        // Darken the text color by ~40% for the shadow
+        val r = ((color ushr 16) and 0xFF) * 6 / 10
+        val g = ((color ushr 8) and 0xFF) * 6 / 10
+        val b = (color and 0xFF) * 6 / 10
+        val shadowRgb = (r shl 16) or (g shl 8) or b
+        val shadowColor = (alpha shl 24) or shadowRgb
+
+        val shadowText = Text.literal(text.string).styled {
+            it.withColor(shadowRgb).withBold(text.style.isBold).withItalic(text.style.isItalic)
+        }
+
+        // Draw shadow (offset down-right)
+        textRenderer.draw(
+            shadowText, x + 1f, y + 1f, shadowColor, false,
+            matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+        )
+        // Draw main text
+        textRenderer.draw(
+            text, x, y, color, false,
+            matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, bgColor, light,
+        )
     }
 
     private fun renderDialogueBubble(
@@ -620,6 +655,46 @@ object BubbleRenderer {
         return formatted
     }
 
+    /**
+     * Renders a small semi-transparent dark pill behind action text for readability.
+     */
+    private fun renderActionPill(matrices: MatrixStack, x: Float, y: Float, w: Float, h: Float, alpha: Float) {
+        val matrix = matrices.peek().positionMatrix
+        val r = 1f  // corner inset
+        val z = 0f
+
+        RenderSystem.enableBlend()
+        RenderSystem.defaultBlendFunc()
+        RenderSystem.disableDepthTest()
+        RenderSystem.depthMask(false)
+        RenderSystem.setShader { GameRenderer.getPositionColorProgram() }
+
+        val tessellator = Tessellator.getInstance()
+        val buf = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
+
+        val bgR = 0f
+        val bgG = 0f
+        val bgB = 0f
+
+        // Main body (inset by corner radius)
+        buf.vertex(matrix, x + r, y + h, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x + w - r, y + h, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x + w - r, y, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x + r, y, z).color(bgR, bgG, bgB, alpha)
+
+        // Top/bottom strips
+        buf.vertex(matrix, x, y + h - r, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x + w, y + h - r, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x + w, y + r, z).color(bgR, bgG, bgB, alpha)
+        buf.vertex(matrix, x, y + r, z).color(bgR, bgG, bgB, alpha)
+
+        BufferRenderer.drawWithGlobalProgram(buf.end())
+
+        RenderSystem.disableBlend()
+        RenderSystem.enableDepthTest()
+        RenderSystem.depthMask(true)
+    }
+
     private fun renderRoundedBackground(matrices: MatrixStack, boxWidth: Int, boxHeight: Int, color: String?, alpha: Float = 1f) {
         val matrix = matrices.peek().positionMatrix
 
@@ -751,18 +826,12 @@ object BubbleRenderer {
             )
         }
 
-        // Render name
-        textRenderer.draw(
-            nameText,
-            x.toFloat(),
-            y.toFloat(),
-            colorWithAlpha,
-            false,
-            matrices.peek().positionMatrix,
-            consumers,
-            TextRenderer.TextLayerType.NORMAL,
-            0,
-            15728880
+        val nameBgAlphaInt = (alpha * 140).toInt()
+        val nameBgColor = (nameBgAlphaInt shl 24)
+
+        drawOutlinedText(
+            textRenderer, nameText, x.toFloat(), y.toFloat(), colorWithAlpha,
+            matrices.peek().positionMatrix, consumers, nameBgColor,
         )
     }
 

@@ -77,6 +77,12 @@ class NPCMessageParserClient : ClientModInitializer {
                 context.client().execute {
                     val (npcUuid, audioBytes) = extractNpcHeader(payload.audioData)
                     println("🎵 Processing audio data... npcUuid=$npcUuid, audioSize=${audioBytes.size}")
+
+                    // Notify TypingManager that voice arrived — releases pending dialogue
+                    if (npcUuid != null) {
+                        TypingManager.onVoiceReceived(npcUuid)
+                    }
+
                     playAudio(audioBytes, npcUuid)
                 }
             } catch (e: Exception) {
