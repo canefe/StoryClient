@@ -1,5 +1,6 @@
 package com.canefe.storyclient.client
 
+import com.canefe.storyclient.client.wheel.NearbyNPCCache
 import com.mojang.blaze3d.systems.RenderSystem
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext
 import net.minecraft.client.MinecraftClient
@@ -545,8 +546,9 @@ object BubbleRenderer {
             )
         }
 
-        if (state.parsedName.isNotEmpty()) {
-            renderNPCName(matrices, consumers, textRenderer, state.parsedName, null, x, -15, dialogue.color, alpha)
+        val displayName = recognitionLabelFor(state.npcId) ?: state.parsedName
+        if (displayName.isNotEmpty()) {
+            renderNPCName(matrices, consumers, textRenderer, displayName, null, x, -15, dialogue.color, alpha)
         }
 
         renderText(matrices, consumers, textRenderer, wrappedLines, x, 0, boxWidth, boxHeight, alpha)
@@ -562,6 +564,18 @@ object BubbleRenderer {
         val y = prevY + (entity.y - prevY) * tickDelta
         val z = prevZ + (entity.z - prevZ) * tickDelta
         return Vec3d(x, y, z)
+    }
+
+    /**
+     * Resolves the per-perceiver display label from NearbyNPCCache so the
+     * bubble respects recognition: descriptor when the local player doesn't
+     * know the speaker, real name when they do. Returns null if the speaker
+     * isn't in the nearby cache (e.g. unmapped player chat) — caller should
+     * fall back to the parsed name from the wire payload.
+     */
+    private fun recognitionLabelFor(npcId: String): String? {
+        val uuid = try { java.util.UUID.fromString(npcId) } catch (_: Exception) { return null }
+        return NearbyNPCCache.get(uuid)?.name?.takeIf { it.isNotBlank() }
     }
 
     private data class ParsedDialogue(

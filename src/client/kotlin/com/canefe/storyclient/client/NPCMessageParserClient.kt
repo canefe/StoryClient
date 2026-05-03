@@ -93,18 +93,153 @@ class NPCMessageParserClient : ClientModInitializer {
 
         println("✅ Registered modern audio receiver")
 
+        // Register Story nearby-NPCs payload + receiver (powers the action wheel)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.wheel.NearbyNPCPayload.ID,
+            com.canefe.storyclient.client.wheel.NearbyNPCPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.wheel.NearbyNPCPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.wheel.NearbyNPCCache.replaceAll(payload.entries)
+        }
+
+        // Recognition set (s2c) — drives Helix-style nametag real name resolution
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.recognition.RecognitionSetPayload.ID,
+            com.canefe.storyclient.client.recognition.RecognitionSetPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.recognition.RecognitionSetPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.recognition.RecognitionCache.replaceAll(payload.known)
+        }
+
+        // Squad list payload (s2c) — drives the command-mode HUD
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.squad.SquadListPayload.ID,
+            com.canefe.storyclient.client.squad.SquadListPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.squad.SquadOrderPayload.ID,
+            com.canefe.storyclient.client.squad.SquadOrderPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.squad.SquadListPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.squad.SquadListCache.replaceAll(payload.entries)
+        }
+
+        // Puppet group payload (s2c) and command payload (c2s)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.puppet.PuppetGroupPayload.ID,
+            com.canefe.storyclient.client.puppet.PuppetGroupPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.puppet.PuppetCommandPayload.ID,
+            com.canefe.storyclient.client.puppet.PuppetCommandPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.puppet.PuppetGroupPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.puppet.PuppetState.replaceAll(payload.names)
+        }
+
+        // NPC perception popup (s2c)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
+            com.canefe.storyclient.client.perception.NpcPerceptionPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
+        ) { payload, _ ->
+            println("[StoryClient] NpcPerception received: uuid=${payload.npcUuid} label=${payload.perceivedLabel}")
+            com.canefe.storyclient.client.perception.PerceptionPopupRenderer.onPerception(
+                payload.npcUuid,
+                payload.perceivedLabel,
+            )
+        }
+
+        // Action wheel keybind (default: R, hold)
+        val wheelKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.action_wheel",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_R,
+                    "key.categories.storyclient",
+                ),
+            )
+
+        // Squad command-mode toggle (default: Y)
+        val squadCommandKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.squad_command",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_Y,
+                    "key.categories.storyclient",
+                ),
+            )
+
         // Register tick event for TypingManager
         ClientTickEvents.END_CLIENT_TICK.register {
             TypingManager.tick()
+
+            // Wheel: open on press, close+commit on release.
+            // R without looking at an NPC, while in puppet mode, exits puppet mode.
+            val isDown = wheelKey.isPressed
+            val wasOpen = com.canefe.storyclient.client.wheel.ActionWheelHud.open
+            if (isDown && !wasOpen) {
+                val opened = com.canefe.storyclient.client.wheel.ActionWheelHud.tryOpen()
+                if (!opened && com.canefe.storyclient.client.puppet.PuppetState.inPuppetMode) {
+                    com.canefe.storyclient.client.puppet.PuppetCommandPayload.clear()
+                    com.canefe.storyclient.client.puppet.PuppetState.localClear()
+                }
+            } else if (!isDown && wasOpen) {
+                com.canefe.storyclient.client.wheel.ActionWheelHud.closeAndCommit()
+            }
+
+            // Squad command-mode toggle: edge-triggered on Y press.
+            while (squadCommandKey.wasPressed()) {
+                com.canefe.storyclient.client.squad.SquadCommandState.toggleCommandMode()
+            }
         }
 
-        // Register world render event for BubbleRenderer
+        // HUD render for the wheel + puppet + squad overlays
+        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register { ctx, _ ->
+            com.canefe.storyclient.client.puppet.PuppetHud.render(ctx)
+            com.canefe.storyclient.client.squad.SquadListHud.render(ctx)
+            com.canefe.storyclient.client.wheel.ActionWheelHud.render(ctx)
+        }
+
+        // Register world render event for BubbleRenderer + squad badges + formation preview
         WorldRenderEvents.AFTER_ENTITIES.register { context ->
             BubbleRenderer.render(context)
+            com.canefe.storyclient.client.perception.PerceptionPopupRenderer.render(context)
+            com.canefe.storyclient.client.squad.SquadBadgeRenderer.render(context)
+            com.canefe.storyclient.client.squad.SquadFormationPreviewRenderer.render(context)
+            com.canefe.storyclient.client.puppet.PuppetCursorRenderer.render(context)
+            com.canefe.storyclient.client.recognition.HelixNametagRenderer.render(context)
         }
 
         // Fix Dialogue command (that removes session, removes buggy dialog box)
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            // Toggle Helix nametag diagnostic logging
+            dispatcher.register(
+                ClientCommandManager.literal("helixdebug")
+                    .executes { ctx ->
+                        val r = com.canefe.storyclient.client.recognition.HelixNametagRenderer
+                        r.debug = !r.debug
+                        ctx.source.sendFeedback(net.minecraft.text.Text.literal(
+                            "Helix nametag debug: ${if (r.debug) "ON (logs to console once/sec)" else "OFF"}"
+                        ))
+                        val cacheSize = com.canefe.storyclient.client.wheel.NearbyNPCCache.all().size
+                        val recogSize = com.canefe.storyclient.client.recognition.RecognitionCache.size()
+                        ctx.source.sendFeedback(net.minecraft.text.Text.literal(
+                            "  NearbyNPCCache=$cacheSize, RecognitionCache=$recogSize"
+                        ))
+                        1
+                    })
+
             dispatcher.register(
                 ClientCommandManager.literal("fixdialogue")
                     .executes {

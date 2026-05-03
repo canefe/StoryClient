@@ -303,7 +303,13 @@ object NPCDialogueHud {
         ctx.fill(x + boxWidth - 5, y + boxHeight - cornerSize, x + boxWidth - 3, y + boxHeight - 3, borderColor)
 
 // 7) draw NPC name with background
-        val nameText = Text.literal(currentNpcName).styled { it.withBold(true) }
+        val displayName = npcId?.let { id ->
+            try {
+                val uuid = java.util.UUID.fromString(id)
+                com.canefe.storyclient.client.wheel.NearbyNPCCache.get(uuid)?.name?.takeIf { it.isNotBlank() }
+            } catch (_: Exception) { null }
+        } ?: currentNpcName
+        val nameText = Text.literal(displayName).styled { it.withBold(true) }
         val nameWidth = textRenderer.getWidth(nameText)
         val nameX = x
         val nameY = y - textRenderer.fontHeight - 4 // 4px vertical gap above box

@@ -7,6 +7,11 @@
     "ChatHudAccessor",
     "ClientConnectionMixin",
     "ClientPlayNetworkHandlerMixin",
+    "EntityRendererLabelMixin",
+    "MouseMixin",
+    "MouseButtonMixin",
+    "RightClickPuppetMixin",
+    "KeyboardMixin",
     "TextSerializationAccessor"
   ],
   "injectors": {
