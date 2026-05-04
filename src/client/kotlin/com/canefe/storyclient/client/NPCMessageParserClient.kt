@@ -18,6 +18,7 @@ import javax.sound.sampled.*
 import javazoom.jl.player.Player
 import net.minecraft.sound.SoundCategory
 import kotlin.math.pow
+import com.canefe.storyclient.client.decision.DecisionHud
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
@@ -210,11 +211,12 @@ class NPCMessageParserClient : ClientModInitializer {
             }
         }
 
-        // HUD render for the wheel + puppet + squad overlays
+        // HUD render for the wheel + puppet + squad + decision overlays
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register { ctx, _ ->
             com.canefe.storyclient.client.puppet.PuppetHud.render(ctx)
             com.canefe.storyclient.client.squad.SquadListHud.render(ctx)
             com.canefe.storyclient.client.wheel.ActionWheelHud.render(ctx)
+            DecisionHud.render(ctx)
         }
 
         // Register world render event for BubbleRenderer + squad badges + formation preview
