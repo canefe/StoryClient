@@ -8,16 +8,30 @@ import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.util.UUID
 
+enum class PopupType(val id: Byte) {
+    PERCEPTION(0),
+    COMBAT_ATTACK(1),
+    COMBAT_ATTACKED(2),
+    MOOD(3),
+    AGGRESSION(4);
+
+    companion object {
+        fun fromId(id: Byte): PopupType = entries.firstOrNull { it.id == id } ?: PERCEPTION
+    }
+}
+
 /**
  * Server→client payload on `story:npc_perception`.
  *
  * Wire format:
  *   long  npcUuidMost
  *   long  npcUuidLeast
- *   UTF   perceivedLabel   (what the NPC calls the target — resolved label)
+ *   byte  type            (PopupType ordinal)
+ *   UTF   perceivedLabel
  */
 data class NpcPerceptionPayload(
     val npcUuid: UUID,
+    val type: PopupType,
     val perceivedLabel: String,
 ) : CustomPayload {
 
@@ -29,6 +43,7 @@ data class NpcPerceptionPayload(
                 { value, buf ->
                     buf.writeLong(value.npcUuid.mostSignificantBits)
                     buf.writeLong(value.npcUuid.leastSignificantBits)
+                    buf.writeByte(value.type.id.toInt())
                     buf.writeString(value.perceivedLabel)
                 },
                 { buf ->
@@ -37,8 +52,9 @@ data class NpcPerceptionPayload(
                     DataInputStream(ByteArrayInputStream(raw)).use { input ->
                         val most = input.readLong()
                         val least = input.readLong()
+                        val type = PopupType.fromId(input.readByte())
                         val label = input.readUTF()
-                        NpcPerceptionPayload(UUID(most, least), label)
+                        NpcPerceptionPayload(UUID(most, least), type, label)
                     }
                 },
             )

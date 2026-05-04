@@ -153,10 +153,11 @@ class NPCMessageParserClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(
             com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
         ) { payload, _ ->
-            println("[StoryClient] NpcPerception received: uuid=${payload.npcUuid} label=${payload.perceivedLabel}")
+            println("[StoryClient] NpcPerception received: uuid=${payload.npcUuid} type=${payload.type} label=${payload.perceivedLabel}")
             com.canefe.storyclient.client.perception.PerceptionPopupRenderer.onPerception(
                 payload.npcUuid,
                 payload.perceivedLabel,
+                payload.type,
             )
         }
 
