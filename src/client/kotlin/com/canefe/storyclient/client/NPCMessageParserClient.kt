@@ -161,6 +161,9 @@ class NPCMessageParserClient : ClientModInitializer {
             )
         }
 
+        // Decision system payloads (s2c prompt/observe, c2s response)
+        com.canefe.storyclient.client.decision.DecisionPacketReceiver.register()
+
         // Action wheel keybind (default: R, hold)
         val wheelKey =
             net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
@@ -181,9 +184,11 @@ class NPCMessageParserClient : ClientModInitializer {
                 ),
             )
 
-        // Register tick event for TypingManager
+        // Register tick event for TypingManager + DecisionState
         ClientTickEvents.END_CLIENT_TICK.register {
             TypingManager.tick()
+            com.canefe.storyclient.client.decision.DecisionState.tick()
+            com.canefe.storyclient.client.decision.CinematicCameraController.tick()
 
             // Wheel: open on press, close+commit on release.
             // R without looking at an NPC, while in puppet mode, exits puppet mode.
