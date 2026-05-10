@@ -56,7 +56,26 @@ object DecisionState {
 
     val votes: MutableMap<String, String> = mutableMapOf()
 
-    var freeformMode: Boolean = false
+    private var _freeformMode: Boolean = false
+    var freeformMode: Boolean
+        get() = _freeformMode
+        set(value) {
+            if (_freeformMode == value) return
+            _freeformMode = value
+            val mc = net.minecraft.client.MinecraftClient.getInstance()
+            // Always toggle the screen on the client thread.
+            mc.execute {
+                if (value) {
+                    if (mc.currentScreen !is DecisionFreeformScreen) {
+                        mc.setScreen(DecisionFreeformScreen())
+                    }
+                } else {
+                    if (mc.currentScreen is DecisionFreeformScreen) {
+                        mc.setScreen(null)
+                    }
+                }
+            }
+        }
     var freeformInput: String = ""
 
     fun showPrompt(prompt: DecisionPrompt) {
@@ -70,6 +89,9 @@ object DecisionState {
     }
 
     fun showObserve(observe: DecisionObserve) {
+        // The leader receives both prompt and observe (server broadcasts observe to all online players).
+        // If we already have a prompt for this decision, ignore the observe so the full panel stays.
+        if (activePrompt?.decisionId == observe.decisionId) return
         activeObserve = observe
         activePrompt = null
     }

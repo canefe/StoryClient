@@ -149,9 +149,6 @@ object PerceptionPopupRenderer {
             val found = world.getOtherEntities(null, box) {
                 it is LivingEntity && it.uuid == uuid
             }.firstOrNull()
-            if (found == null) {
-                println("[PerceptionPopup] entity not found for uuid=$uuid in box around ${cameraEntity.pos}")
-            }
             found?.let { entityIdCache[uuid] = it.id }
             found
         } catch (e: Exception) {

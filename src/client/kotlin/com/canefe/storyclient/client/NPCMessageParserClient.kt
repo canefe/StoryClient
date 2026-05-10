@@ -154,7 +154,6 @@ class NPCMessageParserClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(
             com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
         ) { payload, _ ->
-            println("[StoryClient] NpcPerception received: uuid=${payload.npcUuid} type=${payload.type} label=${payload.perceivedLabel}")
             com.canefe.storyclient.client.perception.PerceptionPopupRenderer.onPerception(
                 payload.npcUuid,
                 payload.perceivedLabel,
@@ -185,11 +184,45 @@ class NPCMessageParserClient : ClientModInitializer {
                 ),
             )
 
+        // Edge-tracked keys for the decision HUD (no Screen, so we poll GLFW directly)
+        val decisionKeys = intArrayOf(
+            org.lwjgl.glfw.GLFW.GLFW_KEY_1,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_2,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_3,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_4,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_5,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_6,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_7,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_8,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_9,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_UP,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE,
+        )
+        val decisionKeyDown = java.util.HashMap<Int, Boolean>()
+
         // Register tick event for TypingManager + DecisionState
         ClientTickEvents.END_CLIENT_TICK.register {
             TypingManager.tick()
             com.canefe.storyclient.client.decision.DecisionState.tick()
             com.canefe.storyclient.client.decision.CinematicCameraController.tick()
+
+            // Decision HUD key polling — edge-triggered, only when a prompt is active
+            if (com.canefe.storyclient.client.decision.DecisionState.activePrompt != null) {
+                val handle = net.minecraft.client.MinecraftClient.getInstance().window.handle
+                for (key in decisionKeys) {
+                    val down = org.lwjgl.glfw.GLFW.glfwGetKey(handle, key) == org.lwjgl.glfw.GLFW.GLFW_PRESS
+                    val wasDown = decisionKeyDown[key] == true
+                    if (down && !wasDown) {
+                        com.canefe.storyclient.client.decision.DecisionHud.handleKeyPress(key)
+                    }
+                    decisionKeyDown[key] = down
+                }
+            } else {
+                if (decisionKeyDown.isNotEmpty()) decisionKeyDown.clear()
+            }
 
             // Wheel: open on press, close+commit on release.
             // R without looking at an NPC, while in puppet mode, exits puppet mode.

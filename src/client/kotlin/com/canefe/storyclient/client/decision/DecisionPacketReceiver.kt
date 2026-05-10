@@ -31,16 +31,22 @@ object DecisionPacketReceiver {
         override fun hashCode(): Int = data.contentHashCode()
     }
 
-    /** Client → server. UTF-8 JSON of decision response. */
-    data class DecisionC2SPayload(val json: String) : CustomPayload {
+    /** Client → server. Raw UTF-8 JSON bytes of decision response (no length prefix). */
+    data class DecisionC2SPayload(val data: ByteArray) : CustomPayload {
         companion object {
             val ID = CustomPayload.Id<DecisionC2SPayload>(Identifier.of("story", "decision_response"))
             val CODEC: PacketCodec<PacketByteBuf, DecisionC2SPayload> = PacketCodec.of(
-                { value, buf -> buf.writeString(value.json) },
-                { buf -> DecisionC2SPayload(buf.readString()) }
+                { value, buf -> buf.writeBytes(value.data) },
+                { buf ->
+                    val bytes = ByteArray(buf.readableBytes())
+                    buf.readBytes(bytes)
+                    DecisionC2SPayload(bytes)
+                }
             )
         }
         override fun getId(): CustomPayload.Id<out CustomPayload> = ID
+        override fun equals(other: Any?): Boolean = other is DecisionC2SPayload && data.contentEquals(other.data)
+        override fun hashCode(): Int = data.contentHashCode()
     }
 
     @Serializable
@@ -96,7 +102,14 @@ object DecisionPacketReceiver {
             freeformText = freeformText,
         )
         val json = DecisionState.json.encodeToString(payload)
-        ClientPlayNetworking.send(DecisionC2SPayload(json))
+        println("[DecisionPacketReceiver] sendResponse decisionId=$decisionId choiceId=$choiceId freeform=${freeformText?.take(40)} json=$json")
+        try {
+            ClientPlayNetworking.send(DecisionC2SPayload(json.toByteArray(Charsets.UTF_8)))
+            println("[DecisionPacketReceiver] ClientPlayNetworking.send OK channel=${DecisionC2SPayload.ID.id}")
+        } catch (e: Exception) {
+            println("[DecisionPacketReceiver] ClientPlayNetworking.send FAILED: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
+        }
 
         DecisionState.dismiss()
         CinematicCameraController.stop()

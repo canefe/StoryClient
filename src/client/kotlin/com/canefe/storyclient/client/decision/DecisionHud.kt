@@ -140,6 +140,7 @@ object DecisionHud {
     /** Returns true if the key was consumed. */
     fun handleKeyPress(keyCode: Int): Boolean {
         val prompt = DecisionState.activePrompt ?: return false
+        println("[DecisionHud] handleKeyPress key=$keyCode freeform=${DecisionState.freeformMode} selected=$selectedIndex")
 
         if (DecisionState.freeformMode) {
             return handleFreeformKey(keyCode, prompt)
@@ -188,6 +189,7 @@ object DecisionHud {
             257 -> { // GLFW_KEY_ENTER
                 val text = DecisionState.freeformInput.trim()
                 if (text.isNotEmpty()) {
+                    println("[DecisionHud] freeform submit decisionId=${prompt.decisionId} text='${text.take(40)}'")
                     DecisionPacketReceiver.sendResponse(prompt.decisionId, null, text)
                     selectedIndex = -1
                 }
@@ -203,6 +205,7 @@ object DecisionHud {
     }
 
     private fun submitChoice(prompt: DecisionPrompt, choiceId: String) {
+        println("[DecisionHud] submitChoice decisionId=${prompt.decisionId} choiceId=$choiceId")
         DecisionPacketReceiver.sendResponse(prompt.decisionId, choiceId, null)
         selectedIndex = -1
     }
