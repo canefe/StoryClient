@@ -12,27 +12,27 @@ import java.io.DataInputStream
  *
  * Wire format mirrors PuppetGroupBroadcaster.encode:
  *   short  count
- *   for each: UTF name
+ *   for each: UTF characterId
  */
-data class PuppetGroupPayload(val names: List<String>) : CustomPayload {
+data class PuppetGroupPayload(val characterIds: List<String>) : CustomPayload {
     companion object {
         val ID = CustomPayload.Id<PuppetGroupPayload>(Identifier.of("story", "puppet_group"))
 
         val CODEC: PacketCodec<PacketByteBuf, PuppetGroupPayload> =
             PacketCodec.of(
                 { value, buf ->
-                    buf.writeShort(value.names.size)
-                    for (n in value.names) buf.writeString(n)
+                    buf.writeShort(value.characterIds.size)
+                    for (id in value.characterIds) buf.writeString(id)
                 },
                 { buf ->
                     val raw = ByteArray(buf.readableBytes())
                     buf.readBytes(raw)
-                    val names = mutableListOf<String>()
+                    val ids = mutableListOf<String>()
                     DataInputStream(ByteArrayInputStream(raw)).use { input ->
                         val count = input.readShort().toInt() and 0xFFFF
-                        repeat(count) { names.add(input.readUTF()) }
+                        repeat(count) { ids.add(input.readUTF()) }
                     }
-                    PuppetGroupPayload(names)
+                    PuppetGroupPayload(ids)
                 },
             )
     }

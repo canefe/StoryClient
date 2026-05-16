@@ -143,7 +143,7 @@ class NPCMessageParserClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(
             com.canefe.storyclient.client.puppet.PuppetGroupPayload.ID,
         ) { payload, _ ->
-            com.canefe.storyclient.client.puppet.PuppetState.replaceAll(payload.names)
+            com.canefe.storyclient.client.puppet.PuppetState.replaceAll(payload.characterIds)
         }
 
         // NPC perception popup (s2c)
@@ -164,12 +164,85 @@ class NPCMessageParserClient : ClientModInitializer {
         // Decision system payloads (s2c prompt/observe, c2s response)
         com.canefe.storyclient.client.decision.DecisionPacketReceiver.register()
 
+        // Permission gate toast (s2c prompt, c2s accept/deny)
+        com.canefe.storyclient.client.permission.PermissionPacketReceiver.register()
+
+        // Directional combat: register all C2S and S2C payloads.
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.combat.SwingIntentPayload.ID,
+            com.canefe.storyclient.client.combat.SwingIntentPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.combat.BlockIntentPayload.ID,
+            com.canefe.storyclient.client.combat.BlockIntentPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.combat.DirectionSwitchPayload.ID,
+            com.canefe.storyclient.client.combat.DirectionSwitchPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.combat.FeintPayload.ID,
+            com.canefe.storyclient.client.combat.FeintPayload.CODEC,
+        )
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.combat.CombatStatePushPayload.ID,
+            com.canefe.storyclient.client.combat.CombatStatePushPayload.CODEC,
+        )
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.combat.HitOutcomePayload.ID,
+            com.canefe.storyclient.client.combat.HitOutcomePayload.CODEC,
+        )
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.combat.IntentRejectedPayload.ID,
+            com.canefe.storyclient.client.combat.IntentRejectedPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.combat.CombatStatePushPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.combat.CombatStateClient.update(payload)
+        }
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.combat.HitOutcomePayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.combat.OutcomeBannerHud.onOutcome(payload)
+            com.canefe.storyclient.client.combat.CombatCameraEffects.onOutcome(payload)
+        }
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.combat.IntentRejectedPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.combat.OutcomeBannerHud.onRejected(payload.reason)
+            // Server rejected our optimistic prediction — clear the busy flag
+            // so the next LMB tries a fresh swing instead of being suppressed.
+            com.canefe.storyclient.client.combat.DirectionInputCapture.localInWindup = false
+            com.canefe.storyclient.client.combat.DirectionInputCapture.localBusy = false
+        }
+
+        // Feint keybind (default: F).
+        val feintKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.feint",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_F,
+                    "key.categories.storyclient",
+                ),
+            )
+
         // Action wheel keybind (default: R, hold)
         val wheelKey =
             net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
                 net.minecraft.client.option.KeyBinding(
                     "key.storyclient.action_wheel",
                     org.lwjgl.glfw.GLFW.GLFW_KEY_R,
+                    "key.categories.storyclient",
+                ),
+            )
+
+        // Live-aim direction toggle for combat HUD (default: V)
+        val liveAimKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.combat_live_aim",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_V,
                     "key.categories.storyclient",
                 ),
             )
@@ -183,6 +256,10 @@ class NPCMessageParserClient : ClientModInitializer {
                     "key.categories.storyclient",
                 ),
             )
+
+        // Permission toast keybinds (defaults: G=accept, H=deny). Registered via
+        // KeyBindingHelper inside the helper so the category appears in Options.
+        com.canefe.storyclient.client.permission.PermissionKeybinds.register()
 
         // Edge-tracked keys for the decision HUD (no Screen, so we poll GLFW directly)
         val decisionKeys = intArrayOf(
@@ -208,6 +285,7 @@ class NPCMessageParserClient : ClientModInitializer {
             TypingManager.tick()
             com.canefe.storyclient.client.decision.DecisionState.tick()
             com.canefe.storyclient.client.decision.CinematicCameraController.tick()
+            com.canefe.storyclient.client.permission.PermissionKeybinds.tickKeybinds()
 
             // Decision HUD key polling — edge-triggered, only when a prompt is active
             if (com.canefe.storyclient.client.decision.DecisionState.activePrompt != null) {
@@ -242,6 +320,24 @@ class NPCMessageParserClient : ClientModInitializer {
             while (squadCommandKey.wasPressed()) {
                 com.canefe.storyclient.client.squad.SquadCommandState.toggleCommandMode()
             }
+
+            // Directional combat: mouse-drag input capture + feint key edge.
+            com.canefe.storyclient.client.combat.DirectionInputCapture.tick()
+            while (liveAimKey.wasPressed()) {
+                val capture = com.canefe.storyclient.client.combat.DirectionInputCapture
+                capture.liveAimEnabled = !capture.liveAimEnabled
+                net.minecraft.client.MinecraftClient.getInstance().player?.sendMessage(
+                    net.minecraft.text.Text.literal(
+                        if (capture.liveAimEnabled) "§a[combat] live aim ON" else "§7[combat] live aim OFF",
+                    ),
+                    true,
+                )
+            }
+            while (feintKey.wasPressed()) {
+                com.canefe.storyclient.client.combat.FeintPayload.send()
+            }
+            com.canefe.storyclient.client.combat.OutcomeBannerHud.tick()
+            com.canefe.storyclient.client.combat.CombatCameraEffects.tick()
         }
 
         // HUD render for the wheel + puppet + squad + decision overlays
@@ -250,6 +346,11 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.squad.SquadListHud.render(ctx)
             com.canefe.storyclient.client.wheel.ActionWheelHud.render(ctx)
             DecisionHud.render(ctx)
+            com.canefe.storyclient.client.permission.PermissionToastHud.render(ctx)
+            com.canefe.storyclient.client.combat.StaminaBarHud.render(ctx)
+            com.canefe.storyclient.client.combat.DirectionCommitHud.render(ctx)
+            com.canefe.storyclient.client.combat.ParryFlashHud.render(ctx)
+            com.canefe.storyclient.client.combat.OutcomeBannerHud.render(ctx)
         }
 
         // Register world render event for BubbleRenderer + squad badges + formation preview

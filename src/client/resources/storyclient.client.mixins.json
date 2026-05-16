@@ -8,6 +8,8 @@
     "ClientConnectionMixin",
     "ClientPlayNetworkHandlerMixin",
     "EntityRendererLabelMixin",
+    "CameraAccessor",
+    "CameraShakeMixin",
     "MouseMixin",
     "MouseButtonMixin",
     "RightClickPuppetMixin",

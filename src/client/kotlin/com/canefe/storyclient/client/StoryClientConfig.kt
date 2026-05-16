@@ -13,6 +13,11 @@ object StoryClientConfig {
     var maxAudioDistance = 32.0 // Maximum distance to hear audio (blocks)
     var minAudioDistance = 2.0 // Distance before attenuation starts (blocks)
 
+    // Directional combat
+    var combatParryWindowScale: Double = 1.0
+    var combatSlowMoEnabled: Boolean = true
+    var combatScreenShakeIntensity: Float = 1.0f
+
     private val gson = Gson()
     private val configFile = File("config/storyclient.json")
 
@@ -28,13 +33,17 @@ object StoryClientConfig {
             use3DAudio = loaded.use3DAudio
             maxAudioDistance = loaded.maxAudioDistance
             minAudioDistance = loaded.minAudioDistance
+            combatParryWindowScale = loaded.combatParryWindowScale
+            combatSlowMoEnabled = loaded.combatSlowMoEnabled
+            combatScreenShakeIntensity = loaded.combatScreenShakeIntensity
         }
     }
 
     fun save() {
         val data = StoryConfigData(
             modEnabled, messageVanishTime, dialogueScale, dialogueYOffset,
-            useBubbleRenderer, use3DAudio, maxAudioDistance, minAudioDistance
+            useBubbleRenderer, use3DAudio, maxAudioDistance, minAudioDistance,
+            combatParryWindowScale, combatSlowMoEnabled, combatScreenShakeIntensity
         )
         configFile.parentFile.mkdirs()
         configFile.writeText(gson.toJson(data))
@@ -48,6 +57,9 @@ object StoryClientConfig {
         val useBubbleRenderer: Boolean = false,
         val use3DAudio: Boolean = true,
         val maxAudioDistance: Double = 32.0,
-        val minAudioDistance: Double = 2.0
+        val minAudioDistance: Double = 2.0,
+        val combatParryWindowScale: Double = 1.0,
+        val combatSlowMoEnabled: Boolean = true,
+        val combatScreenShakeIntensity: Float = 1.0f
     )
 }

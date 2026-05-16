@@ -90,19 +90,22 @@ object ActionWheelHud {
                         if (targets.isEmpty()) Selection.CloseSilent else Selection.Transition(targets)
                     },
                 )
-                // Puppet group is keyed by server-side real names — DMs only see
-                // those via [Entry.realName]/[dmLabel]. Use that for both toggle
-                // wire arg and local optimistic state.
-                val puppetKey = entry.dmLabel
-                val inGroup = com.canefe.storyclient.client.puppet.PuppetState.groupNames.contains(puppetKey)
-                add(
-                    Segment(if (inGroup) "Unpuppet" else "Puppet") {
-                        Selection.Run {
-                            com.canefe.storyclient.client.puppet.PuppetCommandPayload.toggle(puppetKey)
-                            com.canefe.storyclient.client.puppet.PuppetState.localToggle(puppetKey)
-                        }
-                    },
-                )
+                // Puppet group is keyed by characterId so it stays correct even
+                // when the DM has "reveal real names" toggled off and only sees
+                // descriptors for the targeted NPC.
+                val puppetKey = entry.characterId
+                val inGroup = puppetKey.isNotEmpty() &&
+                    com.canefe.storyclient.client.puppet.PuppetState.groupCharacterIds.contains(puppetKey)
+                if (puppetKey.isNotEmpty()) {
+                    add(
+                        Segment(if (inGroup) "Unpuppet" else "Puppet") {
+                            Selection.Run {
+                                com.canefe.storyclient.client.puppet.PuppetCommandPayload.toggle(puppetKey)
+                                com.canefe.storyclient.client.puppet.PuppetState.localToggle(puppetKey)
+                            }
+                        },
+                    )
+                }
             }
         }
 
@@ -110,16 +113,15 @@ object ActionWheelHud {
      * Open the puppet "right-click on NPC" wheel — three actions for directing
      * the current group at that target NPC.
      *
-     * The server's puppet group keys on real NPC names, so add/remove/toggle
-     * commands must send [Entry.dmLabel] (real name when the perceiver is a DM)
-     * rather than the per-perceiver descriptor in [Entry.name]. Move-to looks
-     * up by UUID directly — no name comparison needed.
+     * The server's puppet group keys on characterId, so add/remove/toggle
+     * commands send [Entry.characterId] regardless of what label the local
+     * DM currently sees. Move-to looks up by UUID directly — no name compare.
      */
     fun openPuppetTargetWheel(target: NearbyNPCCache.Entry) {
         if (!com.canefe.storyclient.client.puppet.PuppetState.inPuppetMode) return
-        val groupKey = target.dmLabel
+        val groupKey = target.characterId
         val targets =
-            listOf(
+            listOfNotNull(
                 Segment("Move group here") {
                     Selection.Run {
                         val client = MinecraftClient.getInstance()
@@ -136,8 +138,8 @@ object ActionWheelHud {
                         }
                     }
                 },
-                Segment(
-                    if (com.canefe.storyclient.client.puppet.PuppetState.groupNames.contains(groupKey))
+                if (groupKey.isEmpty()) null else Segment(
+                    if (com.canefe.storyclient.client.puppet.PuppetState.groupCharacterIds.contains(groupKey))
                         "Remove from group"
                     else "Add to group",
                 ) {

@@ -1,5 +1,6 @@
 package com.canefe.storyclient.client.puppet
 
+import com.canefe.storyclient.client.wheel.NearbyNPCCache
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
 
@@ -16,7 +17,10 @@ object PuppetHud {
         val font = client.textRenderer
         val w = client.window.scaledWidth
 
-        val names = PuppetState.groupNames
+        val charIds = PuppetState.groupCharacterIds
+        val names = charIds.map { id ->
+            NearbyNPCCache.all().firstOrNull { it.characterId == id }?.dmLabel ?: id
+        }
         val displayed = names.take(MAX_NAMES_SHOWN).joinToString(", ")
         val overflow = names.size - MAX_NAMES_SHOWN
         val text =

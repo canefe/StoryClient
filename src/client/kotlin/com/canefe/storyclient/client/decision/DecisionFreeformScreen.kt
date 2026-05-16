@@ -48,3 +48,4 @@ class DecisionFreeformScreen : Screen(Text.literal("Decision Freeform")) {
         MinecraftClient.getInstance().setScreen(null)
     }
 }
+

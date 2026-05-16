@@ -95,18 +95,24 @@ object HelixNametagRenderer {
         val recognized = realName != null
         // DM omniscience: server only sends entry.realName when the perceiver
         // is a DM, so any non-empty value here means we're a DM looking at a
-        // character we don't (in-fiction) recognize. Show "Stranger (RealName)"
+        // character we don't (in-fiction) recognize. Show "<short label> (RealName)"
+        // — same label the non-DM would see, with the real name appended in parens
         // so the DM knows who's who without breaking immersion for players.
         val dmRevealName = if (!recognized && entry.realName.isNotBlank()) entry.realName else null
         // Recognized: bold real name on top, descriptor below. DM-revealed:
-        // "Stranger (RealName)" on top, descriptor below. Unrecognized non-DM:
+        // "<short label> (RealName)" on top, descriptor below. Unrecognized non-DM:
         // descriptor (often a full sentence) becomes the only line — wrap it.
-        val nameLine = (realName ?: dmRevealName?.let { "Stranger ($it)" }
-            ?: entry.shortLabel.ifBlank { null }
+        val dmUsedDescriptorAsShort = dmRevealName != null && entry.shortLabel.isBlank() && entry.descriptor.isNotBlank()
+        val nameLine = (realName ?: dmRevealName?.let {
+            val short = entry.shortLabel.ifBlank { entry.descriptor.ifBlank { "Stranger" } }
+            "$short ($it)"
+        } ?: entry.shortLabel.ifBlank { null }
             ?: entry.name).trim()
         val showNameOnTop = recognized || dmRevealName != null || entry.shortLabel.isNotBlank()
+        // Suppress sub-line when DM fell back to descriptor as the short label
+        // (would otherwise show the descriptor twice).
         val subLine =
-            (if (showNameOnTop) entry.descriptor else "").trim()
+            (if (showNameOnTop && !dmUsedDescriptorAsShort) entry.descriptor else "").trim()
         if (nameLine.isEmpty() && subLine.isEmpty()) return
 
         // Anchor at head height so the card reads alongside the face.

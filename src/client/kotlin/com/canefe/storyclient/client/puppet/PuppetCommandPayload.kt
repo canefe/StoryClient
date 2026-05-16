@@ -16,14 +16,17 @@ import java.io.DataOutputStream
  *
  * Opcodes:
  *   0x01 MOVE_TO     UTF world, double x, double y, double z
- *   0x02 ADD         UTF npcName
- *   0x03 REMOVE      UTF npcName
- *   0x04 TOGGLE      UTF npcName
+ *   0x02 ADD         UTF characterId
+ *   0x03 REMOVE      UTF characterId
+ *   0x04 TOGGLE      UTF characterId
  *   0x05 CLEAR
- *   0x06 SPEAK_AT    UTF targetName, UTF text
+ *   0x06 SPEAK_AT    UTF targetCharacterId, UTF text
  *
  * The payload carries pre-encoded bytes so wire format stays in one place
  * and we don't fight Fabric's PacketByteBuf when emitting structured data.
+ *
+ * Targeting is by characterId so puppet ops keep working when the DM has the
+ * "reveal real names" toggle off and only sees descriptors client-side.
  */
 data class PuppetCommandPayload(val data: ByteArray) : CustomPayload {
     companion object {
@@ -46,17 +49,17 @@ data class PuppetCommandPayload(val data: ByteArray) : CustomPayload {
                 it.writeDouble(x); it.writeDouble(y); it.writeDouble(z)
             }
 
-        fun add(name: String) = send { it.writeByte(0x02); it.writeUTF(name) }
+        fun add(characterId: String) = send { it.writeByte(0x02); it.writeUTF(characterId) }
 
-        fun remove(name: String) = send { it.writeByte(0x03); it.writeUTF(name) }
+        fun remove(characterId: String) = send { it.writeByte(0x03); it.writeUTF(characterId) }
 
-        fun toggle(name: String) = send { it.writeByte(0x04); it.writeUTF(name) }
+        fun toggle(characterId: String) = send { it.writeByte(0x04); it.writeUTF(characterId) }
 
         fun clear() = send { it.writeByte(0x05) }
 
-        fun speakAt(targetName: String, text: String) =
+        fun speakAt(targetCharacterId: String, text: String) =
             send {
-                it.writeByte(0x06); it.writeUTF(targetName); it.writeUTF(text)
+                it.writeByte(0x06); it.writeUTF(targetCharacterId); it.writeUTF(text)
             }
 
         private fun send(write: (DataOutputStream) -> Unit) {
