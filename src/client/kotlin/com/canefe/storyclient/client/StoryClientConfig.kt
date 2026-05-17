@@ -18,6 +18,11 @@ object StoryClientConfig {
     var combatSlowMoEnabled: Boolean = true
     var combatScreenShakeIntensity: Float = 1.0f
 
+    // DM display preference: when true, DMs see real names alongside
+    // recognition labels on nametags. Server always sends real names to DMs;
+    // this toggle is a purely cosmetic local filter.
+    var dmRevealRealNames: Boolean = true
+
     private val gson = Gson()
     private val configFile = File("config/storyclient.json")
 
@@ -36,6 +41,7 @@ object StoryClientConfig {
             combatParryWindowScale = loaded.combatParryWindowScale
             combatSlowMoEnabled = loaded.combatSlowMoEnabled
             combatScreenShakeIntensity = loaded.combatScreenShakeIntensity
+            dmRevealRealNames = loaded.dmRevealRealNames
         }
     }
 
@@ -43,7 +49,8 @@ object StoryClientConfig {
         val data = StoryConfigData(
             modEnabled, messageVanishTime, dialogueScale, dialogueYOffset,
             useBubbleRenderer, use3DAudio, maxAudioDistance, minAudioDistance,
-            combatParryWindowScale, combatSlowMoEnabled, combatScreenShakeIntensity
+            combatParryWindowScale, combatSlowMoEnabled, combatScreenShakeIntensity,
+            dmRevealRealNames
         )
         configFile.parentFile.mkdirs()
         configFile.writeText(gson.toJson(data))
@@ -60,6 +67,7 @@ object StoryClientConfig {
         val minAudioDistance: Double = 2.0,
         val combatParryWindowScale: Double = 1.0,
         val combatSlowMoEnabled: Boolean = true,
-        val combatScreenShakeIntensity: Float = 1.0f
+        val combatScreenShakeIntensity: Float = 1.0f,
+        val dmRevealRealNames: Boolean = true,
     )
 }

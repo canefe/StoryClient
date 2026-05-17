@@ -1,5 +1,6 @@
 package com.canefe.storyclient.client.recognition
 
+import com.canefe.storyclient.client.StoryClientConfig
 import com.canefe.storyclient.client.wheel.NearbyNPCCache
 import com.mojang.blaze3d.systems.RenderSystem
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext
@@ -93,12 +94,17 @@ object HelixNametagRenderer {
 
         val realName = if (entry.characterId.isNotEmpty()) RecognitionCache.realNameOf(entry.characterId) else null
         val recognized = realName != null
-        // DM omniscience: server only sends entry.realName when the perceiver
-        // is a DM, so any non-empty value here means we're a DM looking at a
-        // character we don't (in-fiction) recognize. Show "<short label> (RealName)"
-        // — same label the non-DM would see, with the real name appended in parens
-        // so the DM knows who's who without breaking immersion for players.
-        val dmRevealName = if (!recognized && entry.realName.isNotBlank()) entry.realName else null
+        // DM omniscience: server sends entry.realName whenever the perceiver
+        // is a DM, regardless of any toggle. The client decides whether to
+        // surface it via StoryClientConfig.dmRevealRealNames — when the toggle
+        // is off, DMs see the same labels regular players see. When on, the
+        // real name is appended as "<short label> (RealName)" for an in-fiction
+        // -immersive overlay that still tells the DM who's who.
+        val dmRevealName = if (
+            !recognized &&
+            entry.realName.isNotBlank() &&
+            StoryClientConfig.dmRevealRealNames
+        ) entry.realName else null
         // Recognized: bold real name on top, descriptor below. DM-revealed:
         // "<short label> (RealName)" on top, descriptor below. Unrecognized non-DM:
         // descriptor (often a full sentence) becomes the only line — wrap it.
