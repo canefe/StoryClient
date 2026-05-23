@@ -119,6 +119,18 @@ object ActionWheelHud {
                             }
                         },
                     )
+                    val isGrabbed =
+                        com.canefe.storyclient.client.puppet.PuppetState.grabbedCharacterIds.contains(puppetKey)
+                    add(
+                        Segment(if (isGrabbed) "Release" else "Grab") {
+                            Selection.Run {
+                                val nowGrabbed =
+                                    com.canefe.storyclient.client.puppet.PuppetState.localGrabToggle(puppetKey)
+                                com.canefe.storyclient.client.puppet.PuppetCommandPayload
+                                    .dmControl(puppetKey, nowGrabbed)
+                            }
+                        },
+                    )
                 }
             }
         }
