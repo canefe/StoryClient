@@ -31,4 +31,22 @@ object PuppetState {
     fun localClear() {
         groupCharacterIds = emptyList()
     }
+
+    /**
+     * characterIds the local DM has grabbed for live control (label state only;
+     * story-go's GrabRegistry is authoritative).
+     */
+    @Volatile var grabbedCharacterIds: List<String> = emptyList()
+        private set
+
+    /** Optimistic local grab/release toggle; returns the new grabbed state. */
+    fun localGrabToggle(characterId: String): Boolean {
+        return if (grabbedCharacterIds.contains(characterId)) {
+            grabbedCharacterIds = grabbedCharacterIds - characterId
+            false
+        } else {
+            grabbedCharacterIds = grabbedCharacterIds + characterId
+            true
+        }
+    }
 }
