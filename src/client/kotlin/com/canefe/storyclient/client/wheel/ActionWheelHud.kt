@@ -62,6 +62,20 @@ object ActionWheelHud {
             add(
                 Segment("Inspect") { Selection.CloseSilent },
             )
+            // DM-only perception-log inspector. Gated on isDmView (set when the
+            // server includes a realName, which only DMs get) and on having a
+            // characterId to query story-go with.
+            if (entry.isDmView && entry.characterId.isNotEmpty()) {
+                add(
+                    Segment("Perception Log") {
+                        Selection.Run {
+                            MinecraftClient.getInstance().setScreen(
+                                PerceptionLogScreen(entry.characterId, entry.dmLabel),
+                            )
+                        }
+                    },
+                )
+            }
             if (entry.canSpeakAs) {
                 add(
                     Segment("Speak As") {

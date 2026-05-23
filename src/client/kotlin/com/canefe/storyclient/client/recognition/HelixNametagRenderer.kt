@@ -114,11 +114,11 @@ object HelixNametagRenderer {
             "$short ($it)"
         } ?: entry.shortLabel.ifBlank { null }
             ?: entry.name).trim()
-        val showNameOnTop = recognized || dmRevealName != null || entry.shortLabel.isNotBlank()
-        // Suppress sub-line when DM fell back to descriptor as the short label
-        // (would otherwise show the descriptor twice).
+        // Suppress sub-line only when the descriptor is already serving as the
+        // top-line label (DM-reveal fallback) — otherwise we'd render the same
+        // prose twice.
         val subLine =
-            (if (showNameOnTop && !dmUsedDescriptorAsShort) entry.descriptor else "").trim()
+            (if (!dmUsedDescriptorAsShort) entry.descriptor else "").trim()
         if (nameLine.isEmpty() && subLine.isEmpty()) return
 
         // Anchor at head height so the card reads alongside the face.
@@ -145,7 +145,7 @@ object HelixNametagRenderer {
         val dmStatText = dmStatLine?.let { Text.literal(it) }
 
         // Geometry sizing (post-scale "pixels"). Both lines wrap at MAX_TEXT_WIDTH.
-        val showName = showNameOnTop && nameLine.isNotEmpty()
+        val showName = nameLine.isNotEmpty()
         val nameText = if (showName) Text.literal(nameLine).styled { it.withBold(true) } else null
         val nameW = nameText?.let { font.getWidth(it) } ?: 0
         val subLines: List<OrderedText> =

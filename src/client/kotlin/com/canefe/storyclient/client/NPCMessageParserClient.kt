@@ -131,6 +131,24 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.squad.SquadListCache.replaceAll(payload.entries)
         }
 
+        // Perception log inspector (s2c log push, c2s request/forget)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.wheel.PerceptionLogPayload.ID,
+            com.canefe.storyclient.client.wheel.PerceptionLogPayload.CODEC,
+        )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.wheel.PerceptionCommandPayload.ID,
+            com.canefe.storyclient.client.wheel.PerceptionCommandPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.wheel.PerceptionLogPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.wheel.PerceptionLogState.set(
+                payload.characterId,
+                payload.entries,
+            )
+        }
+
         // Puppet group payload (s2c) and command payload (c2s)
         PayloadTypeRegistry.playS2C().register(
             com.canefe.storyclient.client.puppet.PuppetGroupPayload.ID,
@@ -378,6 +396,18 @@ class NPCMessageParserClient : ClientModInitializer {
                         val recogSize = com.canefe.storyclient.client.recognition.RecognitionCache.size()
                         ctx.source.sendFeedback(net.minecraft.text.Text.literal(
                             "  NearbyNPCCache=$cacheSize, RecognitionCache=$recogSize"
+                        ))
+                        1
+                    })
+
+            dispatcher.register(
+                ClientCommandManager.literal("dmrealnames")
+                    .executes { ctx ->
+                        StoryClientConfig.dmRevealRealNames = !StoryClientConfig.dmRevealRealNames
+                        StoryClientConfig.save()
+                        val state = if (StoryClientConfig.dmRevealRealNames) "§aON" else "§cOFF"
+                        ctx.source.sendFeedback(net.minecraft.text.Text.literal(
+                            "DM real-name overlay: $state §7(persists across restarts)"
                         ))
                         1
                     })
