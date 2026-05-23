@@ -179,6 +179,17 @@ class NPCMessageParserClient : ClientModInitializer {
             )
         }
 
+        // Sim item-transfer hologram (s2c)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.sim.ItemTransferPayload.ID,
+            com.canefe.storyclient.client.sim.ItemTransferPayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.sim.ItemTransferPayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.sim.ItemHologramRenderer.spawn(payload)
+        }
+
         // Decision system payloads (s2c prompt/observe, c2s response)
         com.canefe.storyclient.client.decision.DecisionPacketReceiver.register()
 
@@ -379,6 +390,7 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.squad.SquadFormationPreviewRenderer.render(context)
             com.canefe.storyclient.client.puppet.PuppetCursorRenderer.render(context)
             com.canefe.storyclient.client.recognition.HelixNametagRenderer.render(context)
+            com.canefe.storyclient.client.sim.ItemHologramRenderer.render(context)
         }
 
         // Fix Dialogue command (that removes session, removes buggy dialog box)
