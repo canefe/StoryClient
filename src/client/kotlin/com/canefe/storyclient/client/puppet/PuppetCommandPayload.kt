@@ -21,6 +21,7 @@ import java.io.DataOutputStream
  *   0x04 TOGGLE      UTF characterId
  *   0x05 CLEAR
  *   0x06 SPEAK_AT    UTF targetCharacterId, UTF text
+ *   0x07 DM_CONTROL  UTF characterId, byte grabbed(1/0)
  *
  * The payload carries pre-encoded bytes so wire format stays in one place
  * and we don't fight Fabric's PacketByteBuf when emitting structured data.
@@ -60,6 +61,13 @@ data class PuppetCommandPayload(val data: ByteArray) : CustomPayload {
         fun speakAt(targetCharacterId: String, text: String) =
             send {
                 it.writeByte(0x06); it.writeUTF(targetCharacterId); it.writeUTF(text)
+            }
+
+        fun dmControl(characterId: String, grabbed: Boolean) =
+            send {
+                it.writeByte(0x07)
+                it.writeUTF(characterId)
+                it.writeByte(if (grabbed) 1 else 0)
             }
 
         private fun send(write: (DataOutputStream) -> Unit) {
