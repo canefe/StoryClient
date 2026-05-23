@@ -44,12 +44,19 @@ object PerceptionPopupRenderer {
         PopupType.COMBAT_ATTACKED to PopupStyle("🛡", 0xFF8800),
         PopupType.MOOD          to PopupStyle("💭",  0xAADDFF),
         PopupType.AGGRESSION    to PopupStyle("😡",  0xFF2200),
+        PopupType.ACTION        to PopupStyle("➤",  0xC8E6C9),
     )
 
     private val popups = ConcurrentHashMap<UUID, ArrayDeque<Popup>>()
     private val entityIdCache = ConcurrentHashMap<UUID, Int>()
 
     fun onPerception(npcUuid: UUID, perceivedLabel: String, type: PopupType = PopupType.PERCEPTION) {
+        if (type == PopupType.ACTION) {
+            // Collapse to a single live ACTION popup per NPC: a label change replaces
+            // the previous, and a blank label is an explicit clear (no enqueue).
+            popups[npcUuid]?.removeAll { it.type == PopupType.ACTION }
+            if (perceivedLabel.isBlank()) return
+        }
         popups.getOrPut(npcUuid) { ArrayDeque() }.addLast(Popup(perceivedLabel, type))
     }
 

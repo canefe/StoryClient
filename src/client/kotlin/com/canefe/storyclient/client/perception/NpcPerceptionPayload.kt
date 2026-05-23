@@ -13,7 +13,8 @@ enum class PopupType(val id: Byte) {
     COMBAT_ATTACK(1),
     COMBAT_ATTACKED(2),
     MOOD(3),
-    AGGRESSION(4);
+    AGGRESSION(4),
+    ACTION(5);
 
     companion object {
         fun fromId(id: Byte): PopupType = entries.firstOrNull { it.id == id } ?: PERCEPTION
