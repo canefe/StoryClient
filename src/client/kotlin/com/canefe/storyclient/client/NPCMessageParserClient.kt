@@ -195,7 +195,7 @@ class NPCMessageParserClient : ClientModInitializer {
         // NPC emote icon (s2c)
         PayloadTypeRegistry.playS2C().register(NpcEmoteIconPayload.ID, NpcEmoteIconPayload.CODEC)
         ClientPlayNetworking.registerGlobalReceiver(NpcEmoteIconPayload.ID) { payload, _ ->
-            NpcEventPacer.onEmote(payload.entityId, payload.emoteId)
+            NpcEventPacer.onEmote(payload.entityId, payload.emoteId, payload.npcUuid?.toString())
         }
 
         // Sim item-transfer hologram (s2c)

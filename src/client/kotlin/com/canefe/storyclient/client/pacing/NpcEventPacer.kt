@@ -116,11 +116,19 @@ object NpcEventPacer {
         extendSeal(bundle, now)
     }
 
-    fun onEmote(entityId: Int, emoteId: String) {
+    /**
+     * Emote entry point. When [npcUuid] is non-null, the bundle is keyed by
+     * uuid so emotes merge with same-NPC dialogue/voice/action-label arriving
+     * in the same 200ms window (matching the user's "emote+speak should pop
+     * together" requirement). When the server can't supply a uuid (legacy
+     * payload, disguise resolution failed), [npcUuid] is null and we fall
+     * back to entity-id keying — those bundles never merge with dialogue.
+     */
+    fun onEmote(entityId: Int, emoteId: String, npcUuid: String? = null) {
         val now = System.currentTimeMillis()
-        val key = "entity:$entityId"
+        val key = npcUuid ?: "entity:$entityId"
         // Collapse-on-overflow: if the queue is congested AND this emote id
-        // is already pending on this entity, drop the dupe silently.
+        // is already pending on this bundle, drop the dupe silently.
         val congested = readyQueue.size + openBundles.size > QUEUE_DEPTH_COLLAPSE_THRESHOLD
         if (congested) {
             val existing = openBundles[key]
@@ -128,7 +136,7 @@ object NpcEventPacer {
                 return
             }
         }
-        val bundle = bundleFor(npcKey = key, npcUuid = null, now = now)
+        val bundle = bundleFor(npcKey = key, npcUuid = npcUuid, now = now)
         bundle.emoteEntityId = entityId
         bundle.emotes.add(emoteId)
         extendSeal(bundle, now)
