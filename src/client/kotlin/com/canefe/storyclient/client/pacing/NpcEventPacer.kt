@@ -1,7 +1,12 @@
 package com.canefe.storyclient.client.pacing
 
+import com.canefe.storyclient.client.NPCMessageParserClient
 import com.canefe.storyclient.client.TypingManager
+import com.canefe.storyclient.client.emote.EmoteRenderer
+import com.canefe.storyclient.client.perception.PerceptionPopupRenderer
 import com.canefe.storyclient.client.perception.PopupType
+import net.minecraft.client.MinecraftClient
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 
@@ -172,8 +177,30 @@ object NpcEventPacer {
     }
 
     private fun replay(bundle: Bundle) {
-        // Implemented in Task 7. For now, no-op so Task 2 lands without
-        // depending on the renderer wiring.
+        val mc = MinecraftClient.getInstance() ?: return
+        mc.execute {
+            // Order: action-label first (sets sticky), then emote (instant
+            // visual reaction), then dialogue + voice together.
+            val uuidString = bundle.npcUuid
+            if (bundle.actionLabel != null && uuidString != null) {
+                PerceptionPopupRenderer.onPerception(
+                    UUID.fromString(uuidString),
+                    bundle.actionLabel!!,
+                    PopupType.ACTION,
+                )
+            }
+            for (emoteId in bundle.emotes) {
+                EmoteRenderer.onEmote(bundle.emoteEntityId, emoteId)
+            }
+            if (uuidString != null) {
+                for (chunk in bundle.dialogue) {
+                    TypingManager.renderNpcMessage(uuidString, chunk.text, chunk.color, chunk.isNew)
+                }
+            }
+            if (bundle.voiceAudio != null) {
+                NPCMessageParserClient.playAudio(bundle.voiceAudio!!, uuidString)
+            }
+        }
     }
 
     /** Test-only: reset all internal state. */

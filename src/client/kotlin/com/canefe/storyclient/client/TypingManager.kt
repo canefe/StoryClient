@@ -50,10 +50,10 @@ object TypingManager {
             return
         }
 
-        displayNpcMessage(npcId, text, color, isNew)
+        renderNpcMessage(npcId, text, color, isNew)
     }
 
-    private fun displayNpcMessage(npcId: String, text: String, color: String?, isNew: Boolean) {
+    internal fun renderNpcMessage(npcId: String, text: String, color: String?, isNew: Boolean) {
         MinecraftClient.getInstance().execute {
             val entityId = findNpcEntityId(npcId)
 
@@ -79,10 +79,10 @@ object TypingManager {
      */
     fun onVoiceReceived(npcId: String) {
         val pending = pendingVoiceDialogues.remove(npcId) ?: return
-        displayNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
+        renderNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
     }
 
-    private fun findNpcEntityId(npcId: String): Int? {
+    internal fun findNpcEntityId(npcId: String): Int? {
         return try {
             val client = MinecraftClient.getInstance()
             val player = client.player ?: return null
@@ -305,7 +305,7 @@ object TypingManager {
             .filter { (_, pending) -> now - pending.timestamp > VOICE_WAIT_TIMEOUT_MS }
         for ((npcId, pending) in timedOut) {
             pendingVoiceDialogues.remove(npcId)
-            displayNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
+            renderNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
         }
     }
 }

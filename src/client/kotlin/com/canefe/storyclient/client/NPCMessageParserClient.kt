@@ -27,6 +27,12 @@ class NPCMessageParserClient : ClientModInitializer {
         private var audioClip: Clip? = null
         private val chunkBuffer = mutableMapOf<String, ChunkData>()
         private val activePositionalAudio = mutableMapOf<String, PositionalAudioController>()
+
+        private var instance: NPCMessageParserClient? = null
+
+        internal fun playAudio(audioData: ByteArray, npcUuidFromPacket: String?) {
+            instance?.playAudioInternal(audioData, npcUuidFromPacket)
+        }
     }
 
     // Data class to hold chunked audio data
@@ -67,6 +73,7 @@ class NPCMessageParserClient : ClientModInitializer {
     }
 
     override fun onInitializeClient() {
+        instance = this
         StoryClientConfig.load()
 
         // Register the AudioPayload type first (for modern clients)
@@ -575,7 +582,7 @@ class NPCMessageParserClient : ClientModInitializer {
         }
     }
 
-    private fun playAudio(audioData: ByteArray, npcUuidFromPacket: String?) {
+    private fun playAudioInternal(audioData: ByteArray, npcUuidFromPacket: String?) {
         try {
             // Stop any currently playing audio first
             //stopCurrentAudio()
