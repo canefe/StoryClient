@@ -1,7 +1,18 @@
 package com.canefe.storyclient.client.emote
 
+import com.mojang.blaze3d.systems.RenderSystem
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext
+import net.minecraft.client.MinecraftClient
+import net.minecraft.client.render.BufferRenderer
+import net.minecraft.client.render.GameRenderer
+import net.minecraft.client.render.Tessellator
+import net.minecraft.client.render.VertexFormat
+import net.minecraft.client.render.VertexFormats
+import net.minecraft.entity.Entity
 import net.minecraft.util.Identifier
+import org.joml.Matrix4f
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.min
 
 /**
  * Renders floating emote icons (laugh, cry, anger, pain, shock) above NPCs.
@@ -52,6 +63,77 @@ object EmoteRenderer {
     fun sweep(nowMs: Long = System.currentTimeMillis()) {
         val cutoff = nowMs - TOTAL_MS
         active.entries.removeIf { it.value.startMs < cutoff }
+    }
+
+    /**
+     * Per-frame draw. For each active emote whose entity is still in the world,
+     * draws a billboarded textured quad anchored at the entity's head + 0.5
+     * blocks, rising another 0.5 blocks over the emote's lifetime, with alpha
+     * easing in (RISE) and out (EXIT).
+     */
+    fun render(context: WorldRenderContext) {
+        if (active.isEmpty()) return
+        sweep()
+        val mc = MinecraftClient.getInstance()
+        val world = mc.world ?: return
+        val camera = context.camera()
+        val camPos = camera.pos
+        val matrices = context.matrixStack() ?: return
+        val now = System.currentTimeMillis()
+
+        for ((entityId, emote) in active) {
+            val entity: Entity = world.getEntityById(entityId) ?: continue
+            val age = now - emote.startMs
+            if (age < 0 || age > TOTAL_MS) continue
+
+            val alpha = alphaFor(age)
+            val rise = riseFor(age)
+            val ex = entity.x
+            val ey = entity.y + entity.height + 0.5 + rise
+            val ez = entity.z
+
+            val half = 0.4f
+
+            matrices.push()
+            matrices.translate(ex - camPos.x, ey - camPos.y, ez - camPos.z)
+            matrices.multiply(camera.rotation)
+            val m: Matrix4f = matrices.peek().positionMatrix
+
+            RenderSystem.enableBlend()
+            RenderSystem.defaultBlendFunc()
+            RenderSystem.setShader { GameRenderer.getPositionTexProgram() }
+            RenderSystem.setShaderTexture(0, emote.texture)
+            RenderSystem.setShaderColor(1f, 1f, 1f, alpha)
+
+            val buf = Tessellator.getInstance().begin(
+                VertexFormat.DrawMode.QUADS,
+                VertexFormats.POSITION_TEXTURE,
+            )
+            buf.vertex(m, -half, -half, 0f).texture(0f, 1f)
+            buf.vertex(m,  half, -half, 0f).texture(1f, 1f)
+            buf.vertex(m,  half,  half, 0f).texture(1f, 0f)
+            buf.vertex(m, -half,  half, 0f).texture(0f, 0f)
+            BufferRenderer.drawWithGlobalProgram(buf.end())
+
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+            RenderSystem.disableBlend()
+            matrices.pop()
+        }
+    }
+
+    private fun alphaFor(ageMs: Long): Float = when {
+        ageMs < RISE_MS -> ageMs.toFloat() / RISE_MS.toFloat()
+        ageMs < RISE_MS + HOLD_MS -> 1f
+        else -> {
+            val t = (ageMs - RISE_MS - HOLD_MS).toFloat() / EXIT_MS.toFloat()
+            (1f - t).coerceAtLeast(0f)
+        }
+    }
+
+    /** Vertical lift in world units; total 0.5 blocks over [TOTAL_MS]. */
+    private fun riseFor(ageMs: Long): Double {
+        val t = min(1.0, ageMs.toDouble() / TOTAL_MS.toDouble())
+        return 0.5 * t
     }
 
     /** Test-only accessor. */
