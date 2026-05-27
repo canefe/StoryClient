@@ -1,5 +1,6 @@
 package com.canefe.storyclient.client.pacing
 
+import com.canefe.storyclient.client.TypingManager
 import com.canefe.storyclient.client.perception.PopupType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -55,7 +56,49 @@ object NpcEventPacer {
     // ── Public API (no-op until Tasks 2+ implement the methods) ────────────
 
     fun onDialogueChunk(npcId: String, text: String, color: String?, voicePending: Boolean) {
-        // Implemented in Task 3.
+        val now = System.currentTimeMillis()
+        val bundle = bundleFor(npcKey = npcId, npcUuid = npcId, now = now)
+        // First dialogue chunk of this bundle is "new"; subsequent chunks
+        // (e.g. streaming tokens) are updates to the same session.
+        val isNew = bundle.dialogue.isEmpty() && !TypingManager.isSessionActive(npcId)
+        bundle.dialogue.add(DialogueChunk(text, color, isNew))
+        if (voicePending) {
+            bundle.voicePending = true
+        }
+        extendSeal(bundle, now)
+    }
+
+    /**
+     * Get the open bundle for [npcKey], opening one if needed. Caller must
+     * call [extendSeal] after mutating the bundle's contents to update its
+     * deadline.
+     */
+    private fun bundleFor(npcKey: String, npcUuid: String?, now: Long): Bundle {
+        return openBundles.getOrPut(npcKey) {
+            Bundle(
+                npcKey = npcKey,
+                npcUuid = npcUuid,
+                openedAtMs = now,
+                sealAtMs = now + BUNDLE_WINDOW_MS,
+            )
+        }
+    }
+
+    /**
+     * Extend the bundle's seal deadline based on what's inside:
+     *   - normal: 200ms after the most recent event, bounded by 1000ms after
+     *     the bundle was opened (prevents an event-spamming NPC from holding
+     *     the bundle open forever)
+     *   - voice-pending without audio yet: up to 3000ms after the bundle was
+     *     opened (preserves the legacy VOICE_WAIT_TIMEOUT_MS semantic)
+     */
+    private fun extendSeal(bundle: Bundle, now: Long) {
+        val cap = if (bundle.voicePending && bundle.voiceAudio == null) {
+            bundle.openedAtMs + VOICE_WAIT_MS
+        } else {
+            bundle.openedAtMs + BUNDLE_MAX_OPEN_MS
+        }
+        bundle.sealAtMs = minOf(now + BUNDLE_WINDOW_MS, cap)
     }
 
     fun onVoiceAudio(npcId: String, audioBytes: ByteArray) {

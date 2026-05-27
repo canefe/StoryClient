@@ -31,6 +31,8 @@ object TypingManager {
 
     fun hasActiveSession(): Boolean = activeSessions.isNotEmpty()
 
+    internal fun isSessionActive(npcId: String): Boolean = activeSessions.containsKey(npcId)
+
     fun getActiveSessionText(): String? {
         return activeSessions.values.firstOrNull()?.getCurrentText()
     }
