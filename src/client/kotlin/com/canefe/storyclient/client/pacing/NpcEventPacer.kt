@@ -130,7 +130,12 @@ object NpcEventPacer {
     }
 
     fun onActionLabel(npcId: String, label: String) {
-        // Implemented in Task 6.
+        val now = System.currentTimeMillis()
+        val bundle = bundleFor(npcKey = npcId, npcUuid = npcId, now = now)
+        // Last-write-wins. Blank label = clear (handled by the renderer at
+        // replay time, matches existing PerceptionPopupRenderer semantics).
+        bundle.actionLabel = label
+        extendSeal(bundle, now)
     }
 
     fun tick() {
