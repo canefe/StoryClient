@@ -71,12 +71,41 @@ object NpcEventPacer {
     }
 
     fun tick() {
-        // Implemented in Task 2.
+        tickAt(System.currentTimeMillis())
     }
 
     /** Test-only: drive [tick] with an injected clock. */
     internal fun tickForTest(nowMs: Long) {
-        // Implemented in Task 2.
+        tickAt(nowMs)
+    }
+
+    private fun tickAt(nowMs: Long) {
+        // 1. Seal any open bundles whose sealAtMs has passed.
+        val toSeal = openBundles.entries.toList()
+            .filter { (_, bundle) -> nowMs >= bundle.sealAtMs }
+            .map { it.key }
+        for (key in toSeal) {
+            val sealed = openBundles.remove(key) ?: continue
+            // Dedupe emotes at seal time (e.g. LAUGH+LAUGH+LAUGH → LAUGH).
+            val deduped = sealed.emotes.distinct()
+            sealed.emotes.clear()
+            sealed.emotes.addAll(deduped)
+            readyQueue.addLast(sealed)
+        }
+
+        // 2. Pop at most one bundle per POP_INTERVAL_MS.
+        if (nowMs - lastPopMs >= POP_INTERVAL_MS) {
+            val bundle = readyQueue.pollFirst()
+            if (bundle != null) {
+                lastPopMs = nowMs
+                replay(bundle)
+            }
+        }
+    }
+
+    private fun replay(bundle: Bundle) {
+        // Implemented in Task 7. For now, no-op so Task 2 lands without
+        // depending on the renderer wiring.
     }
 
     /** Test-only: reset all internal state. */
