@@ -102,7 +102,13 @@ object NpcEventPacer {
     }
 
     fun onVoiceAudio(npcId: String, audioBytes: ByteArray) {
-        // Implemented in Task 4.
+        val now = System.currentTimeMillis()
+        val bundle = bundleFor(npcKey = npcId, npcUuid = npcId, now = now)
+        bundle.voiceAudio = audioBytes
+        // Audio arrival cancels the voice-wait extension — once we have the
+        // bytes there's no reason to keep the bundle open beyond the normal
+        // 200ms window (capped at openedAt + 1000ms).
+        extendSeal(bundle, now)
     }
 
     fun onEmote(entityId: Int, emoteId: String) {
