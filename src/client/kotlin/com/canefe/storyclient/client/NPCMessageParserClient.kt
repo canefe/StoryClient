@@ -195,7 +195,10 @@ class NPCMessageParserClient : ClientModInitializer {
         // NPC emote icon (s2c)
         PayloadTypeRegistry.playS2C().register(NpcEmoteIconPayload.ID, NpcEmoteIconPayload.CODEC)
         ClientPlayNetworking.registerGlobalReceiver(NpcEmoteIconPayload.ID) { payload, _ ->
-            NpcEventPacer.onEmote(payload.entityId, payload.emoteId, payload.npcUuid?.toString())
+            // Emotes bypass the pacer — they're cheap visual reactions and the
+            // queue delay made them feel detached from the moment they describe.
+            // Dialogue/voice/action-label still pace via NpcEventPacer.
+            EmoteRenderer.onEmote(payload.entityId, payload.emoteId)
         }
 
         // Sim item-transfer hologram (s2c)
