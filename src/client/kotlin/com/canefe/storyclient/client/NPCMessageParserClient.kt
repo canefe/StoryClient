@@ -19,6 +19,8 @@ import javazoom.jl.player.Player
 import net.minecraft.sound.SoundCategory
 import kotlin.math.pow
 import com.canefe.storyclient.client.decision.DecisionHud
+import com.canefe.storyclient.client.emote.EmoteRenderer
+import com.canefe.storyclient.client.emote.NpcEmoteIconPayload
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
@@ -177,6 +179,12 @@ class NPCMessageParserClient : ClientModInitializer {
                 payload.perceivedLabel,
                 payload.type,
             )
+        }
+
+        // NPC emote icon (s2c)
+        PayloadTypeRegistry.playS2C().register(NpcEmoteIconPayload.ID, NpcEmoteIconPayload.CODEC)
+        ClientPlayNetworking.registerGlobalReceiver(NpcEmoteIconPayload.ID) { payload, _ ->
+            EmoteRenderer.onEmote(payload.entityId, payload.emoteId)
         }
 
         // Sim item-transfer hologram (s2c)
@@ -386,6 +394,7 @@ class NPCMessageParserClient : ClientModInitializer {
         WorldRenderEvents.AFTER_ENTITIES.register { context ->
             BubbleRenderer.render(context)
             com.canefe.storyclient.client.perception.PerceptionPopupRenderer.render(context)
+            EmoteRenderer.render(context)
             com.canefe.storyclient.client.squad.SquadBadgeRenderer.render(context)
             com.canefe.storyclient.client.squad.SquadFormationPreviewRenderer.render(context)
             com.canefe.storyclient.client.puppet.PuppetCursorRenderer.render(context)
