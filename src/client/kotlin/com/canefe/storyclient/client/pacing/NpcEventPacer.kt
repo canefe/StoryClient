@@ -112,7 +112,21 @@ object NpcEventPacer {
     }
 
     fun onEmote(entityId: Int, emoteId: String) {
-        // Implemented in Task 5.
+        val now = System.currentTimeMillis()
+        val key = "entity:$entityId"
+        // Collapse-on-overflow: if the queue is congested AND this emote id
+        // is already pending on this entity, drop the dupe silently.
+        val congested = readyQueue.size + openBundles.size > QUEUE_DEPTH_COLLAPSE_THRESHOLD
+        if (congested) {
+            val existing = openBundles[key]
+            if (existing != null && existing.emotes.contains(emoteId)) {
+                return
+            }
+        }
+        val bundle = bundleFor(npcKey = key, npcUuid = null, now = now)
+        bundle.emoteEntityId = entityId
+        bundle.emotes.add(emoteId)
+        extendSeal(bundle, now)
     }
 
     fun onActionLabel(npcId: String, label: String) {
