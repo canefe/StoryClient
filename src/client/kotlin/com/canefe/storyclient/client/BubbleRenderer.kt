@@ -22,9 +22,6 @@ import kotlin.math.*
 
 object BubbleRenderer {
     private const val RENDER_DISTANCE = 32.0
-    private const val BOX_WIDTH = 195
-    private const val PADDING = 12
-    private const val LINE_SPACING = 1.0f
     private const val SCALE_FACTOR = 0.02f
 
     private const val FADE_IN_MS = 300L
@@ -328,102 +325,86 @@ object BubbleRenderer {
         val entityHeight = entity.height
         val actionScale = SCALE_FACTOR * StoryClientConfig.dialogueScale.toFloat() * 1.4f
 
-        // Use a seed based on npcId so positions are stable per-NPC but vary between NPCs
+        // Stable per-NPC randomization so positions don't reshuffle frame-to-frame.
         val seed = npcId.hashCode().toLong()
         val rng = Random(seed)
 
-        // Anchor at the NPC's mid-body height
+        // Anchor at mid-body height (mirror of Helix card / sticky-action pill anchor).
+        // Helix + sticky pill live on the LEFT flank; we put dialogue actions on the
+        // RIGHT flank as a single column so they read as one tidy stack instead of
+        // scattering across the sky above the head where multiple NPCs' columns collide.
         val anchorPos = entityPos.add(0.0, (entityHeight * 0.5).toDouble(), 0.0)
 
-        // Billboard direction: calculate once for consistent side placement
         val difference = cameraPos.subtract(anchorPos)
         val yaw = -(atan2(difference.z, difference.x) + PI / 2.0)
         val horizontalDistance = sqrt(difference.x * difference.x + difference.z * difference.z)
         val pitch = atan2(difference.y, horizontalDistance)
 
-        // Pre-generate random values so iteration order doesn't matter
-        val tilts = wordGroups.indices.map { (rng.nextDouble() * 20.0 - 10.0).toFloat() }
-        val yVariations = wordGroups.indices.map { (rng.nextDouble() * 8.0 - 4.0).toFloat() }
+        // Stable per-row x jitter so the column has a hand-written feel without
+        // reshuffling every frame.
+        val xJittersPx = wordGroups.indices.map { (rng.nextDouble() * 6.0 - 3.0).toFloat() }
+        val tilts = wordGroups.indices.map { (rng.nextDouble() * 8.0 - 4.0).toFloat() }
 
-        // Staggered pop-up animation timing
         val now = System.currentTimeMillis()
-        val staggerDelayMs = 350L  // Delay between each word group appearing
-        val popDurationMs = 450L   // How long the scale-up animation takes
+        val staggerDelayMs = 300L
+        val popDurationMs = 400L
 
-        // Alternate word groups between left and right side of the body
+        // Right-flank column geometry (post-scale pixels). Hug the body — small inner
+        // offset, single column. After the -X flip below, screen-right is post-scale
+        // negative X (same convention as PerceptionPopupRenderer / Helix card).
+        val innerEdgePx = 20f         // distance from centerline to column's left edge
+        val rowHeightPx = textRenderer.fontHeight + 4f
+        val totalH = wordGroups.size * rowHeightPx
+        val topYPx = -totalH / 2f     // center column vertically on the anchor
+
         for ((i, group) in wordGroups.withIndex()) {
-            // Calculate animation progress for this group
             val groupStartTime = action.startTime + (i * staggerDelayMs)
             val elapsed = now - groupStartTime
-            if (elapsed < 0) continue // Not yet visible
+            if (elapsed < 0) continue
 
-            // Scale easing: overshoot then settle (pop effect)
             val rawProgress = (elapsed.toFloat() / popDurationMs).coerceIn(0f, 1f)
             val popScale = if (rawProgress < 1f) {
-                // Overshoot ease-out: goes to ~1.15 then settles to 1.0
                 val t = rawProgress
                 val overshoot = 1.15f
                 1f - (1f - t) * (1f - t) * (1f - overshoot * t)
-            } else {
-                1f
-            }
-
+            } else 1f
             if (popScale <= 0.01f) continue
 
             matrices.push()
-
-            // Alternate sides: even indices go left, odd go right
-            val side = if (i % 2 == 0) -1.0 else 1.0
-
-            // Vertical spread: distribute groups along the body height, top-to-bottom reading order
-            val yFraction = (i.toFloat() / maxOf(wordGroups.size - 1, 1)) // 0.0 to 1.0
-            val yPos = entityHeight * (1.0 - yFraction * 0.7) // top ~100% down to ~30% of body height
-
-            val groupPos = anchorPos.add(
-                0.0,
-                yPos.toDouble() - (entityHeight * 0.5).toDouble() + yVariations[i] * 0.02,
-                0.0
-            )
-
-            // Translate to group position relative to camera
             matrices.translate(
-                groupPos.x - cameraPos.x,
-                groupPos.y - cameraPos.y,
-                groupPos.z - cameraPos.z
+                anchorPos.x - cameraPos.x,
+                anchorPos.y - cameraPos.y,
+                anchorPos.z - cameraPos.z,
             )
-
-            // Billboard: face camera
             matrices.multiply(Quaternionf().rotationY(yaw.toFloat()))
             matrices.multiply(Quaternionf().rotationX(pitch.toFloat()))
+            matrices.multiply(Quaternionf().rotationZ(Math.toRadians(tilts[i].toDouble()).toFloat()))
 
-            // Slight Z-rotation tilt per group
-            val tilt = tilts[i]
-            matrices.multiply(Quaternionf().rotationZ(Math.toRadians(tilt.toDouble()).toFloat()))
-
-            // Apply pop scale animation
             val animatedScale = actionScale * popScale
             matrices.scale(-animatedScale, -animatedScale, animatedScale)
 
-            val displayText = Text.literal(group)
-                .styled { it.withItalic(true).withColor(actionColorRgb) }
-
+            val displayText = Text.literal(group).styled { it.withItalic(true).withColor(actionColorRgb) }
             val textWidth = textRenderer.getWidth(displayText)
 
-            // Position on the left or right side in screen-space
-            val xPixelOffset = (side * (textWidth / 2f + 30f)).toFloat()
+            // Right flank in screen space → positive post-scale X (Helix card and the
+            // sticky-action pill use NEGATIVE X and land on the left, so we mirror that).
+            // Slide-in: rows enter from further out (more positive) and ease toward innerEdgePx.
+            val slideOffset = (1f - rawProgress) * 18f
+            val leftEdgeXPostScale = innerEdgePx + slideOffset + xJittersPx[i]
+            val textX = leftEdgeXPostScale
+            val textY = topYPx + i * rowHeightPx
 
-            // Fade in alpha alongside the scale
             val alphaInt = (rawProgress.coerceIn(0f, 1f) * 255).toInt()
             val textColor = (alphaInt shl 24) or actionColorRgb
 
-            val textX = -textWidth / 2f + xPixelOffset
-            val textY = yVariations[i]
-            val bgAlphaInt = (rawProgress.coerceIn(0f, 1f) * 140).toInt()
-            val bgColor = (bgAlphaInt shl 24)
+            // Counter-scale so per-row pop-overshoot scales around the row's own anchor,
+            // not the column's. Keeps the column visually stable as rows pop in.
+            val drawX = textX / popScale
+            val drawY = textY / popScale
 
             drawOutlinedText(
-                textRenderer, displayText, textX, textY, textColor,
-                matrices.peek().positionMatrix, consumers, bgColor,
+                textRenderer, displayText, drawX, drawY, textColor,
+                matrices.peek().positionMatrix, consumers, 0,
             )
 
             matrices.pop()
@@ -445,23 +426,24 @@ object BubbleRenderer {
         light: Int = 15728880,
     ) {
         val alpha = ((color ushr 24) and 0xFF)
-        // Darken the text color by ~40% for the shadow
-        val r = ((color ushr 16) and 0xFF) * 6 / 10
-        val g = ((color ushr 8) and 0xFF) * 6 / 10
-        val b = (color and 0xFF) * 6 / 10
-        val shadowRgb = (r shl 16) or (g shl 8) or b
-        val shadowColor = (alpha shl 24) or shadowRgb
-
-        val shadowText = Text.literal(text.string).styled {
-            it.withColor(shadowRgb).withBold(text.style.isBold).withItalic(text.style.isItalic)
+        val outlineColor = (alpha shl 24) // pure black with text's alpha
+        val outlineText = Text.literal(text.string).styled {
+            it.withColor(0x000000).withBold(text.style.isBold).withItalic(text.style.isItalic)
         }
 
-        // Draw shadow (offset down-right)
-        textRenderer.draw(
-            shadowText, x + 1f, y + 1f, shadowColor, false,
-            matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+        // 8-direction outline at 1px offset for a clean, pill-free border.
+        val offsets = arrayOf(
+            -1f to -1f, 0f to -1f, 1f to -1f,
+            -1f to 0f,            1f to 0f,
+            -1f to 1f,  0f to 1f, 1f to 1f,
         )
-        // Draw main text
+        for ((dx, dy) in offsets) {
+            textRenderer.draw(
+                outlineText, x + dx, y + dy, outlineColor, false,
+                matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+            )
+        }
+        // Main text on top, no background pill.
         textRenderer.draw(
             text, x, y, color, false,
             matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, bgColor, light,
@@ -477,83 +459,138 @@ object BubbleRenderer {
         cameraPos: Vec3d,
         tickDelta: Float
     ) {
-        matrices.push()
-
         val entityPos = getInterpolatedPosition(entity, tickDelta)
         val entityHeight = entity.height
-        val bubblePos = entityPos.add(0.0, entityHeight.toDouble() + 0.4, 0.0)
+        val anchorPos = entityPos.add(0.0, entityHeight.toDouble() + 0.4, 0.0)
 
-        matrices.translate(
-            bubblePos.x - cameraPos.x,
-            bubblePos.y - cameraPos.y,
-            bubblePos.z - cameraPos.z
-        )
-
-        val difference = cameraPos.subtract(bubblePos)
+        val difference = cameraPos.subtract(anchorPos)
         val yaw = -(atan2(difference.z, difference.x) + PI / 2.0)
         val horizontalDistance = sqrt(difference.x * difference.x + difference.z * difference.z)
         val pitch = atan2(difference.y, horizontalDistance)
 
-        matrices.multiply(Quaternionf().rotationY(yaw.toFloat()))
-        matrices.multiply(Quaternionf().rotationX(pitch.toFloat()))
-
-        val scale = SCALE_FACTOR * StoryClientConfig.dialogueScale.toFloat()
-        matrices.scale(-scale, -scale, scale)
-
         val textRenderer = MinecraftClient.getInstance().textRenderer
-        val formattedText = buildFormattedText(dialogue.text)
-        val wrappedLines = textRenderer.wrapLines(formattedText, BOX_WIDTH - PADDING * 2)
+        val scale = SCALE_FACTOR * StoryClientConfig.dialogueScale.toFloat()
 
-        val widest = wrappedLines.maxOfOrNull { textRenderer.getWidth(it) } ?: 0
-        val boxWidth = max(BOX_WIDTH, widest + PADDING * 2)
-        val lineHeight = textRenderer.fontHeight
-        val boxHeight = max(50, PADDING * 2 + (wrappedLines.size * lineHeight))
-
-        val x = -boxWidth / 2
-        val y = -boxHeight - 10
-
-        matrices.translate(0f, y.toFloat(), 0f)
-
-        val alpha = calculateAlpha(dialogue.startTime, dialogue.endTime, dialogue.shouldRemove)
-        if (alpha <= 0f) {
-            matrices.pop()
-            return
-        }
-
-        renderRoundedBackground(matrices, boxWidth, boxHeight, dialogue.color, alpha)
-        matrices.translate(0f, 0f, -0.1f)
-
-        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
-        val textAlpha = alphaInt shl 24
-
-        // Render avatar outside the box, to its left
-        if (state.parsedAvatar != null) {
-            val avatarText = Text.literal(state.parsedAvatar)
-            val avatarWidth = textRenderer.getWidth(avatarText)
-            val avatarHeight = 42
-            val avatarX = x - avatarWidth - 8
-            val avatarY = (boxHeight - avatarHeight) / 2
-
-            val nameColorValue = dialogue.color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
-            val colorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
-
-            renderAvatarFrame(matrices, avatarX - 2, avatarY - 4, avatarWidth + 4, avatarHeight + 8, colorRgb, alpha)
-            textRenderer.draw(
-                avatarText, avatarX.toFloat(), avatarY.toFloat(),
-                textAlpha or 0xFFFFFF, false,
-                matrices.peek().positionMatrix, consumers,
-                TextRenderer.TextLayerType.NORMAL, 0, 15728880
-            )
-        }
+        val words = dialogue.text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return
 
         val displayName = recognitionLabelFor(state.npcId) ?: state.parsedName
-        if (displayName.isNotEmpty()) {
-            renderNPCName(matrices, consumers, textRenderer, displayName, null, x, -15, dialogue.color, alpha)
+        val nameColorValue = dialogue.color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
+        val nameColorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
+
+        val now = System.currentTimeMillis()
+        val staggerDelayMs = 120L  // gap between successive words appearing
+        val popDurationMs = 220L   // per-word scale-up duration
+        val lineHeight = textRenderer.fontHeight + 2
+        val maxLineWidth = 180  // pixels (text-renderer space) before wrapping
+
+        // Pre-compute stable line layout from the full text so words don't reflow as they pop in.
+        data class LaidWord(val text: String, val lineIdx: Int, val xInLine: Float, val width: Int)
+        val laid = mutableListOf<LaidWord>()
+        var lineIdx = 0
+        var cursorX = 0f
+        val spaceWidth = textRenderer.getWidth(" ").toFloat()
+        for (w in words) {
+            val wWidth = textRenderer.getWidth(w)
+            val needsSpace = cursorX > 0f
+            val prospective = cursorX + (if (needsSpace) spaceWidth else 0f) + wWidth
+            if (cursorX > 0f && prospective > maxLineWidth) {
+                lineIdx += 1
+                cursorX = 0f
+            }
+            val x = cursorX + (if (cursorX > 0f) spaceWidth else 0f)
+            laid += LaidWord(w, lineIdx, x, wWidth)
+            cursorX = x + wWidth
+        }
+        val lineCount = lineIdx + 1
+        val lineWidths = IntArray(lineCount)
+        for (lw in laid) {
+            val end = (lw.xInLine + lw.width).toInt()
+            if (end > lineWidths[lw.lineIdx]) lineWidths[lw.lineIdx] = end
         }
 
-        renderText(matrices, consumers, textRenderer, wrappedLines, x, 0, boxWidth, boxHeight, alpha)
+        val nameLines = if (displayName.isNotEmpty()) 1 else 0
+        val totalLines = lineCount + nameLines
+        val topY = -(totalLines * lineHeight) - 4  // -4 so the whole block sits a touch higher above the head
+        val firstTextLineY = topY + (nameLines * lineHeight)
 
-        matrices.pop()
+        val dialogueAlpha = calculateAlpha(dialogue.startTime, dialogue.endTime, dialogue.shouldRemove)
+        if (dialogueAlpha <= 0f) return
+
+        fun pushBillboard() {
+            matrices.push()
+            matrices.translate(
+                anchorPos.x - cameraPos.x,
+                anchorPos.y - cameraPos.y,
+                anchorPos.z - cameraPos.z,
+            )
+            matrices.multiply(Quaternionf().rotationY(yaw.toFloat()))
+            matrices.multiply(Quaternionf().rotationX(pitch.toFloat()))
+        }
+
+        // Speaker name (top, not staggered)
+        if (displayName.isNotEmpty()) {
+            pushBillboard()
+            matrices.scale(-scale, -scale, scale)
+            val nameText = Text.literal(displayName).styled { it.withBold(true) }
+            val nameWidth = textRenderer.getWidth(nameText)
+            val alphaInt = (dialogueAlpha * 255).toInt().coerceIn(0, 255)
+            val nameColor = (alphaInt shl 24) or nameColorRgb
+            drawOutlinedText(
+                textRenderer, nameText,
+                -nameWidth / 2f, topY.toFloat(),
+                nameColor, matrices.peek().positionMatrix, consumers, 0,
+            )
+            matrices.pop()
+        }
+
+        // Per-word pop-in. Each word stays in place once shown; only the currently popping word scales.
+        for ((i, lw) in laid.withIndex()) {
+            val wordStart = dialogue.startTime + (i * staggerDelayMs)
+            val elapsed = now - wordStart
+            if (elapsed < 0) continue
+
+            val rawProgress = (elapsed.toFloat() / popDurationMs).coerceIn(0f, 1f)
+            val popScale = if (rawProgress < 1f) {
+                val t = rawProgress
+                val overshoot = 1.15f
+                1f - (1f - t) * (1f - t) * (1f - overshoot * t)
+            } else {
+                1f
+            }
+            if (popScale <= 0.01f) continue
+
+            val wordAlpha = dialogueAlpha * rawProgress
+            if (wordAlpha <= 0f) continue
+
+            // Line layout: center each line horizontally around x=0.
+            val lineW = lineWidths[lw.lineIdx]
+            val lineLeft = -lineW / 2f
+            val wordCenterX = lineLeft + lw.xInLine + lw.width / 2f
+            val wordY = firstTextLineY + lw.lineIdx * lineHeight
+
+            pushBillboard()
+            // Apply per-word pop scale around the word's own center so it grows in place.
+            val animatedScale = scale * popScale
+            matrices.scale(-animatedScale, -animatedScale, animatedScale)
+
+            val alphaInt = (wordAlpha * 255).toInt().coerceIn(0, 255)
+            val textColor = (alphaInt shl 24) or 0xFFFFFF
+
+            val displayText = Text.literal(lw.text)
+            // Because we scaled by popScale, the un-scaled positions get multiplied. Divide both
+            // axes by popScale so the word's screen-space center and baseline stay put while it pops.
+            val drawX = (wordCenterX - lw.width / 2f) / popScale
+            val drawY = wordY.toFloat() / popScale
+
+            drawOutlinedText(
+                textRenderer, displayText,
+                drawX, drawY,
+                textColor, matrices.peek().positionMatrix, consumers, 0,
+            )
+
+            matrices.pop()
+        }
     }
 
     private fun getInterpolatedPosition(entity: Entity, tickDelta: Float): Vec3d {
@@ -667,288 +704,5 @@ object BubbleRenderer {
         }
 
         return formatted
-    }
-
-    /**
-     * Renders a small semi-transparent dark pill behind action text for readability.
-     */
-    private fun renderActionPill(matrices: MatrixStack, x: Float, y: Float, w: Float, h: Float, alpha: Float) {
-        val matrix = matrices.peek().positionMatrix
-        val r = 1f  // corner inset
-        val z = 0f
-
-        RenderSystem.enableBlend()
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.disableDepthTest()
-        RenderSystem.depthMask(false)
-        RenderSystem.setShader { GameRenderer.getPositionColorProgram() }
-
-        val tessellator = Tessellator.getInstance()
-        val buf = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
-
-        val bgR = 0f
-        val bgG = 0f
-        val bgB = 0f
-
-        // Main body (inset by corner radius)
-        buf.vertex(matrix, x + r, y + h, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x + w - r, y + h, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x + w - r, y, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x + r, y, z).color(bgR, bgG, bgB, alpha)
-
-        // Top/bottom strips
-        buf.vertex(matrix, x, y + h - r, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x + w, y + h - r, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x + w, y + r, z).color(bgR, bgG, bgB, alpha)
-        buf.vertex(matrix, x, y + r, z).color(bgR, bgG, bgB, alpha)
-
-        BufferRenderer.drawWithGlobalProgram(buf.end())
-
-        RenderSystem.disableBlend()
-        RenderSystem.enableDepthTest()
-        RenderSystem.depthMask(true)
-    }
-
-    private fun renderRoundedBackground(matrices: MatrixStack, boxWidth: Int, boxHeight: Int, color: String?, alpha: Float = 1f) {
-        val matrix = matrices.peek().positionMatrix
-
-        RenderSystem.enableBlend()
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.enableDepthTest()
-        RenderSystem.depthMask(true)
-        RenderSystem.setShader { GameRenderer.getPositionColorProgram() }
-
-        val tessellator = Tessellator.getInstance()
-        val bufferBuilder = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
-
-        // Background color
-        val bgColor = 0xfbc170
-        val bgR = ((bgColor shr 16) and 0xFF) / 255f
-        val bgG = ((bgColor shr 8) and 0xFF) / 255f
-        val bgB = (bgColor and 0xFF) / 255f
-
-        // Border color
-        val borderColor = 0xB86A2F
-        val bR = ((borderColor shr 16) and 0xFF) / 255f
-        val bG = ((borderColor shr 8) and 0xFF) / 255f
-        val bB = (borderColor and 0xFF) / 255f
-
-        val x = -boxWidth / 2f
-        val y = 0f
-        val bgZ = 0.5f   // Background layer (further from camera)
-        val brZ = 0.3f   // Border layer (closer to camera, in front of background)
-        val w = boxWidth.toFloat()
-        val h = boxHeight.toFloat()
-        val r = 4f // corner radius
-        val b = 2f // border thickness
-
-        // Helper to draw a filled rect at a specific z
-        fun fill(x1: Float, y1: Float, x2: Float, y2: Float, cr: Float, cg: Float, cb: Float, z: Float) {
-            bufferBuilder.vertex(matrix, x1, y2, z).color(cr, cg, cb, alpha)
-            bufferBuilder.vertex(matrix, x2, y2, z).color(cr, cg, cb, alpha)
-            bufferBuilder.vertex(matrix, x2, y1, z).color(cr, cg, cb, alpha)
-            bufferBuilder.vertex(matrix, x1, y1, z).color(cr, cg, cb, alpha)
-        }
-
-        // Main background (inset by corner radius to leave room for rounded corners)
-        // Horizontal strip (full width, excluding top/bottom corner rows)
-        fill(x, y + r, x + w, y + h - r, bgR, bgG, bgB, bgZ)
-        // Top strip (excluding corners)
-        fill(x + r, y, x + w - r, y + r, bgR, bgG, bgB, bgZ)
-        // Bottom strip (excluding corners)
-        fill(x + r, y + h - r, x + w - r, y + h, bgR, bgG, bgB, bgZ)
-
-        // Corner fills (small squares to approximate rounded corners)
-        fill(x + 1, y + 1, x + r, y + r, bgR, bgG, bgB, bgZ)
-        fill(x + w - r, y + 1, x + w - 1, y + r, bgR, bgG, bgB, bgZ)
-        fill(x + 1, y + h - r, x + r, y + h - 1, bgR, bgG, bgB, bgZ)
-        fill(x + w - r, y + h - r, x + w - 1, y + h - 1, bgR, bgG, bgB, bgZ)
-
-        // Border — top edge (between corners)
-        fill(x + r, y, x + w - r, y + b, bR, bG, bB, brZ)
-        // Border — bottom edge
-        fill(x + r, y + h - b, x + w - r, y + h, bR, bG, bB, brZ)
-        // Border — left edge
-        fill(x, y + r, x + b, y + h - r, bR, bG, bB, brZ)
-        // Border — right edge
-        fill(x + w - b, y + r, x + w, y + h - r, bR, bG, bB, brZ)
-
-        // Rounded corner borders (L-shaped pieces)
-        // Top-left
-        fill(x + 1, y, x + r, y + b, bR, bG, bB, brZ)
-        fill(x, y + 1, x + b, y + r, bR, bG, bB, brZ)
-        // Top-right
-        fill(x + w - r, y, x + w - 1, y + b, bR, bG, bB, brZ)
-        fill(x + w - b, y + 1, x + w, y + r, bR, bG, bB, brZ)
-        // Bottom-left
-        fill(x + 1, y + h - b, x + r, y + h, bR, bG, bB, brZ)
-        fill(x, y + h - r, x + b, y + h - 1, bR, bG, bB, brZ)
-        // Bottom-right
-        fill(x + w - r, y + h - b, x + w - 1, y + h, bR, bG, bB, brZ)
-        fill(x + w - b, y + h - r, x + w, y + h - 1, bR, bG, bB, brZ)
-
-        BufferRenderer.drawWithGlobalProgram(bufferBuilder.end())
-
-        RenderSystem.disableBlend()
-        RenderSystem.disableDepthTest()
-    }
-
-    private fun renderNPCName(
-        matrices: MatrixStack,
-        consumers: VertexConsumerProvider,
-        textRenderer: TextRenderer,
-        name: String,
-        avatar: String?,
-        x: Int,
-        y: Int,
-        color: String?,
-        alpha: Float = 1f
-    ) {
-        val nameText = Text.literal(name).styled { it.withBold(true) }
-        val nameColorValue = color?.let { if (it.startsWith("#")) it else "#$it" } ?: "#FFCC44"
-        val colorRgb = nameColorValue.removePrefix("#").trim().toIntOrNull(16) ?: 0xFFCC44
-        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
-        val colorWithAlpha = (alphaInt shl 24) or colorRgb
-
-        // Render avatar if present
-        if (avatar != null) {
-            val avatarText = Text.literal(avatar)
-            val avatarWidth = textRenderer.getWidth(avatarText)
-            val avatarHeight = 42
-
-            val avatarX = x + 2
-            val avatarY = y - avatarHeight - 5
-
-            val frameX = avatarX - 2
-            val frameY = avatarY - 4
-            val frameWidth = avatarWidth + 4
-            val frameHeight = avatarHeight + 8
-
-            renderAvatarFrame(matrices, frameX, frameY, frameWidth, frameHeight, colorRgb, alpha)
-
-            textRenderer.draw(
-                avatarText,
-                avatarX.toFloat(),
-                avatarY.toFloat(),
-                (alphaInt shl 24) or 0xFFFFFF,
-                false,
-                matrices.peek().positionMatrix,
-                consumers,
-                TextRenderer.TextLayerType.NORMAL,
-                0,
-                15728880
-            )
-        }
-
-        val nameBgAlphaInt = (alpha * 140).toInt()
-        val nameBgColor = (nameBgAlphaInt shl 24)
-
-        drawOutlinedText(
-            textRenderer, nameText, x.toFloat(), y.toFloat(), colorWithAlpha,
-            matrices.peek().positionMatrix, consumers, nameBgColor,
-        )
-    }
-
-    private fun renderAvatarFrame(
-        matrices: MatrixStack,
-        frameX: Int,
-        frameY: Int,
-        frameWidth: Int,
-        frameHeight: Int,
-        colorRgb: Int,
-        alpha: Float = 1f
-    ) {
-        val matrix = matrices.peek().positionMatrix
-
-        RenderSystem.enableBlend()
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.enableDepthTest()
-        RenderSystem.depthMask(true)
-        RenderSystem.setShader { GameRenderer.getPositionColorProgram() }
-
-        val tessellator = Tessellator.getInstance()
-        val bufferBuilder = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
-
-        // Extract RGB components
-        val r = ((colorRgb shr 16) and 0xFF) / 255f
-        val g = ((colorRgb shr 8) and 0xFF) / 255f
-        val b = (colorRgb and 0xFF) / 255f
-
-        val z = 0.5f  // Match background depth
-
-        // Helper function to draw a filled rectangle
-        fun fillRect(x1: Int, y1: Int, x2: Int, y2: Int) {
-            val fx1 = x1.toFloat()
-            val fy1 = y1.toFloat()
-            val fx2 = x2.toFloat()
-            val fy2 = y2.toFloat()
-
-            bufferBuilder.vertex(matrix, fx1, fy2, z).color(r, g, b, alpha)
-            bufferBuilder.vertex(matrix, fx2, fy2, z).color(r, g, b, alpha)
-            bufferBuilder.vertex(matrix, fx2, fy1, z).color(r, g, b, alpha)
-            bufferBuilder.vertex(matrix, fx1, fy1, z).color(r, g, b, alpha)
-        }
-
-        // Top left corner
-        fillRect(frameX, frameY, frameX + 2, frameY + 2)
-        fillRect(frameX + 2, frameY, frameX + 4, frameY + 1)
-        fillRect(frameX, frameY + 2, frameX + 1, frameY + 4)
-
-        // Top right corner
-        fillRect(frameX + frameWidth - 2, frameY, frameX + frameWidth, frameY + 2)
-        fillRect(frameX + frameWidth - 4, frameY, frameX + frameWidth - 2, frameY + 1)
-        fillRect(frameX + frameWidth - 1, frameY + 2, frameX + frameWidth, frameY + 4)
-
-        // Bottom left corner
-        fillRect(frameX, frameY + frameHeight - 2, frameX + 2, frameY + frameHeight)
-        fillRect(frameX, frameY + frameHeight - 4, frameX + 1, frameY + frameHeight - 2)
-        fillRect(frameX + 2, frameY + frameHeight - 1, frameX + 4, frameY + frameHeight)
-
-        // Bottom right corner
-        fillRect(frameX + frameWidth - 2, frameY + frameHeight - 2, frameX + frameWidth, frameY + frameHeight)
-        fillRect(frameX + frameWidth - 1, frameY + frameHeight - 4, frameX + frameWidth, frameY + frameHeight - 2)
-        fillRect(frameX + frameWidth - 4, frameY + frameHeight - 1, frameX + frameWidth - 2, frameY + frameHeight)
-
-        BufferRenderer.drawWithGlobalProgram(bufferBuilder.end())
-
-        RenderSystem.disableBlend()
-        RenderSystem.disableDepthTest()
-    }
-
-    private fun renderText(
-        matrices: MatrixStack,
-        consumers: VertexConsumerProvider,
-        textRenderer: TextRenderer,
-        wrappedLines: List<net.minecraft.text.OrderedText>,
-        x: Int,
-        y: Int,
-        boxWidth: Int,
-        boxHeight: Int,
-        alpha: Float = 1f
-    ) {
-        val alphaInt = (alpha * 255).toInt().coerceIn(0, 255)
-        val textColor = (alphaInt shl 24) or 0x52130A
-        val fullBright = 15728880
-
-        var textY = y + PADDING
-        val textX = x + PADDING
-
-        wrappedLines.forEach { line ->
-            if (textY <= y + boxHeight - PADDING) {
-                textRenderer.draw(
-                    line,
-                    textX.toFloat(),
-                    textY.toFloat(),
-                    textColor,
-                    false,
-                    matrices.peek().positionMatrix,
-                    consumers,
-                    TextRenderer.TextLayerType.NORMAL,
-                    0,
-                    fullBright
-                )
-                textY += textRenderer.fontHeight
-            }
-        }
     }
 }

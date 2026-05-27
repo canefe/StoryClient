@@ -29,11 +29,18 @@ enum class PopupType(val id: Byte) {
  *   long  npcUuidLeast
  *   byte  type            (PopupType ordinal)
  *   UTF   perceivedLabel
+ *   int   entityId        (Bukkit entity id, or -1 if unknown)
+ *
+ * [entityId] lets the client resolve the in-world entity by id rather than by
+ * uuid — required for LibsDisguises-disguised NPCs whose disguise uuid never
+ * matches a client-side entity uuid. Decoding tolerates packets without the
+ * trailing int (treated as -1) for backward compatibility.
  */
 data class NpcPerceptionPayload(
     val npcUuid: UUID,
     val type: PopupType,
     val perceivedLabel: String,
+    val entityId: Int = -1,
 ) : CustomPayload {
 
     companion object {
@@ -46,6 +53,7 @@ data class NpcPerceptionPayload(
                     buf.writeLong(value.npcUuid.leastSignificantBits)
                     buf.writeByte(value.type.id.toInt())
                     buf.writeString(value.perceivedLabel)
+                    buf.writeInt(value.entityId)
                 },
                 { buf ->
                     val raw = ByteArray(buf.readableBytes())
@@ -55,7 +63,8 @@ data class NpcPerceptionPayload(
                         val least = input.readLong()
                         val type = PopupType.fromId(input.readByte())
                         val label = input.readUTF()
-                        NpcPerceptionPayload(UUID(most, least), type, label)
+                        val entityId = if (input.available() >= 4) input.readInt() else -1
+                        NpcPerceptionPayload(UUID(most, least), type, label, entityId)
                     }
                 },
             )

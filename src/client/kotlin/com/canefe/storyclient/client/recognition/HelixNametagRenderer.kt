@@ -199,6 +199,21 @@ object HelixNametagRenderer {
         }
 
         matrices.pop()
+
+        // Publish layout for under-card stackers (sticky-action pill, perception popups).
+        // cy + cardH is the card's bottom edge in post-scale Y; cx is the left edge, and
+        // the right edge sits at -SIDE_OFFSET_PX (= cx + cardW). Consumers right-align to
+        // -SIDE_OFFSET_PX so their right edge matches the card's.
+        HelixLayout.publish(
+            HelixLayout.State(
+                targetUuid = entity.uuid,
+                cardBottomY = cy + cardH,
+                cardRightX = -SIDE_OFFSET_PX,
+                scale = SCALE,
+                anchorMaxY = anchor.y,
+                frameMs = System.currentTimeMillis(),
+            )
+        )
         log("drew '$nameLine' / '$subLine'${dmStatLine?.let { " / $it" } ?: ""}")
     }
 

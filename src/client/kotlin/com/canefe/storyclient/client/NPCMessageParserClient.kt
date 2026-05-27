@@ -178,6 +178,8 @@ class NPCMessageParserClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(
             com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
         ) { payload, _ ->
+            // [DBG perception-recv] TEMP — confirm ACTION packets arrive + carry entityId.
+            println("[DBG perception-recv] uuid=${payload.npcUuid} type=${payload.type} label='${payload.perceivedLabel}' entityId=${payload.entityId}")
             if (payload.type == com.canefe.storyclient.client.perception.PopupType.ACTION) {
                 NpcEventPacer.onActionLabel(payload.npcUuid.toString(), payload.perceivedLabel)
             } else {
@@ -185,6 +187,7 @@ class NPCMessageParserClient : ClientModInitializer {
                     payload.npcUuid,
                     payload.perceivedLabel,
                     payload.type,
+                    payload.entityId,
                 )
             }
         }
