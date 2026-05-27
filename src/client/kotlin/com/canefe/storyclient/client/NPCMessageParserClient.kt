@@ -21,6 +21,7 @@ import kotlin.math.pow
 import com.canefe.storyclient.client.decision.DecisionHud
 import com.canefe.storyclient.client.emote.EmoteRenderer
 import com.canefe.storyclient.client.emote.NpcEmoteIconPayload
+import com.canefe.storyclient.client.pacing.NpcEventPacer
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
@@ -82,18 +83,14 @@ class NPCMessageParserClient : ClientModInitializer {
         // Register the modern CustomPayload receiver
         ClientPlayNetworking.registerGlobalReceiver(AudioPayload.ID) { payload, context ->
             try {
-                println("📦 Received audio payload! Size: ${payload.audioData.size} bytes")
-
                 context.client().execute {
                     val (npcUuid, audioBytes) = extractNpcHeader(payload.audioData)
-                    println("🎵 Processing audio data... npcUuid=$npcUuid, audioSize=${audioBytes.size}")
-
-                    // Notify TypingManager that voice arrived — releases pending dialogue
                     if (npcUuid != null) {
-                        TypingManager.onVoiceReceived(npcUuid)
+                        NpcEventPacer.onVoiceAudio(npcUuid, audioBytes)
+                    } else {
+                        // No uuid header — legacy path, play immediately.
+                        playAudio(audioBytes, null)
                     }
-
-                    playAudio(audioBytes, npcUuid)
                 }
             } catch (e: Exception) {
                 println("❌ Error processing audio packet: ${e.message}")
@@ -181,17 +178,21 @@ class NPCMessageParserClient : ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(
             com.canefe.storyclient.client.perception.NpcPerceptionPayload.ID,
         ) { payload, _ ->
-            com.canefe.storyclient.client.perception.PerceptionPopupRenderer.onPerception(
-                payload.npcUuid,
-                payload.perceivedLabel,
-                payload.type,
-            )
+            if (payload.type == com.canefe.storyclient.client.perception.PopupType.ACTION) {
+                NpcEventPacer.onActionLabel(payload.npcUuid.toString(), payload.perceivedLabel)
+            } else {
+                com.canefe.storyclient.client.perception.PerceptionPopupRenderer.onPerception(
+                    payload.npcUuid,
+                    payload.perceivedLabel,
+                    payload.type,
+                )
+            }
         }
 
         // NPC emote icon (s2c)
         PayloadTypeRegistry.playS2C().register(NpcEmoteIconPayload.ID, NpcEmoteIconPayload.CODEC)
         ClientPlayNetworking.registerGlobalReceiver(NpcEmoteIconPayload.ID) { payload, _ ->
-            EmoteRenderer.onEmote(payload.entityId, payload.emoteId)
+            NpcEventPacer.onEmote(payload.entityId, payload.emoteId)
         }
 
         // Sim item-transfer hologram (s2c)

@@ -42,15 +42,9 @@ object TypingManager {
     fun getActiveNpcUuid(): String? = activeSessions.keys.firstOrNull()
 
     private fun parseAndDisplayNpcMessage(npcId: String, text: String, color: String? = null, voicePending: Boolean = false) {
-        val isNew = !activeSessions.containsKey(npcId)
-
-        if (voicePending) {
-            // Hold dialogue — wait for voice to arrive before displaying
-            pendingVoiceDialogues[npcId] = PendingDialogue(npcId, text, color, isNew)
-            return
-        }
-
-        renderNpcMessage(npcId, text, color, isNew)
+        // The pacer owns voice-wait state via Bundle.voicePending. We hand
+        // it the chunk and let it decide when to call back into renderNpcMessage.
+        com.canefe.storyclient.client.pacing.NpcEventPacer.onDialogueChunk(npcId, text, color, voicePending)
     }
 
     internal fun renderNpcMessage(npcId: String, text: String, color: String?, isNew: Boolean) {
@@ -307,6 +301,8 @@ object TypingManager {
             pendingVoiceDialogues.remove(npcId)
             renderNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
         }
+
+        com.canefe.storyclient.client.pacing.NpcEventPacer.tick()
     }
 }
 
