@@ -17,18 +17,6 @@ object TypingManager {
     private val sessionLastSeen = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val npcMessages = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    // Voice sync: holds dialogue display until voice arrives
-    private data class PendingDialogue(
-        val npcId: String,
-        val text: String,
-        val color: String?,
-        val isNew: Boolean,
-        val timestamp: Long = System.currentTimeMillis(),
-    )
-
-    private val pendingVoiceDialogues = java.util.concurrent.ConcurrentHashMap<String, PendingDialogue>()
-    private const val VOICE_WAIT_TIMEOUT_MS = 3000L // Display dialogue after 3s even without voice
-
     fun hasActiveSession(): Boolean = activeSessions.isNotEmpty()
 
     internal fun isSessionActive(npcId: String): Boolean = activeSessions.containsKey(npcId)
@@ -65,15 +53,6 @@ object TypingManager {
                 }
             }
         }
-    }
-
-    /**
-     * Called when audio arrives for an NPC. If there's a pending dialogue waiting
-     * for voice, display it now.
-     */
-    fun onVoiceReceived(npcId: String) {
-        val pending = pendingVoiceDialogues.remove(npcId) ?: return
-        renderNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
     }
 
     internal fun findNpcEntityId(npcId: String): Int? {
@@ -292,14 +271,6 @@ object TypingManager {
         for (npcId in outdatedSessions) {
             finishSessionForNpc(npcId)
             sessionLastSeen.remove(npcId)
-        }
-
-        // Timeout pending voice dialogues — display them even without voice
-        val timedOut = pendingVoiceDialogues.entries.toList()
-            .filter { (_, pending) -> now - pending.timestamp > VOICE_WAIT_TIMEOUT_MS }
-        for ((npcId, pending) in timedOut) {
-            pendingVoiceDialogues.remove(npcId)
-            renderNpcMessage(pending.npcId, pending.text, pending.color, pending.isNew)
         }
 
         com.canefe.storyclient.client.pacing.NpcEventPacer.tick()
