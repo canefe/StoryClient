@@ -59,6 +59,30 @@ dependencies {
 
     // Add MP3 support
     implementation("javazoom:jlayer:1.0.1")
+
+    // Dear ImGui (Java bindings) for the DM Control Panel overlay.
+    // Use the same approach as Axiom: bundle binding + lwjgl3 backend + all-OS natives,
+    // and shade them into the mod jar via `include` so end-users don't need to install them.
+    // Earliest imgui-java release with a macOS-arm64 native (Apple Silicon).
+    // Axiom bundles 1.86.11 — but that's x86_64-only on macOS and crashes on M-series chips.
+    // 1.87.7 is the first universal2 build. Targets LWJGL 3.3.4 transitively, compatible
+    // with Minecraft 1.21.1's bundled LWJGL 3.3.3 (we exclude the transitive below
+    // so MC owns the LWJGL version).
+    val imguiVersion = "1.87.7"
+    val imguiBinding = "io.github.spair:imgui-java-binding:$imguiVersion"
+    val imguiLwjgl3 = "io.github.spair:imgui-java-lwjgl3:$imguiVersion"
+    val imguiWin = "io.github.spair:imgui-java-natives-windows:$imguiVersion"
+    val imguiLinux = "io.github.spair:imgui-java-natives-linux:$imguiVersion"
+    val imguiMac = "io.github.spair:imgui-java-natives-macos:$imguiVersion"
+    // Exclude LWJGL transitives — Minecraft owns the LWJGL version on the classpath.
+    val excludeLwjgl: ExternalModuleDependency.() -> Unit = {
+        exclude(group = "org.lwjgl")
+    }
+    implementation(imguiBinding, excludeLwjgl); include(imguiBinding)
+    implementation(imguiLwjgl3,  excludeLwjgl); include(imguiLwjgl3)
+    runtimeOnly(imguiWin,    excludeLwjgl);     include(imguiWin)
+    runtimeOnly(imguiLinux,  excludeLwjgl);     include(imguiLinux)
+    runtimeOnly(imguiMac,    excludeLwjgl);     include(imguiMac)
 }
 
 tasks.processResources {
@@ -114,5 +138,40 @@ publishing {
         // Notice: This block does NOT have the same function as the block in the top level.
         // The repositories here will be used for publishing your artifact, not for
         // retrieving dependencies.
+    }
+}
+
+// Build the remapped jar and deploy it into the Prism Launcher "Story" instance's mods folder.
+// Override the target with -Pprism_mods_dir=/path/to/mods (e.g. for a different instance).
+val deployToPrism by tasks.registering(Copy::class) {
+    group = "story"
+    description = "Builds the remapped jar and copies it into the Prism Launcher Story instance mods folder, replacing the previous build."
+
+    // remapJar is the deployable, Loom-remapped artifact (what `build` produces in build/libs).
+    val remapJar = tasks.named<org.gradle.jvm.tasks.Jar>("remapJar")
+    dependsOn(remapJar)
+
+    val defaultModsDir = "${System.getProperty("user.home")}/Library/Application Support/PrismLauncher/instances/Story/.minecraft/mods"
+    val modsDir = (project.findProperty("prism_mods_dir") as String?) ?: defaultModsDir
+    val baseName = base.archivesName.get()
+
+    val jarFile = remapJar.flatMap { it.archiveFile }
+    val jarName = remapJar.flatMap { it.archiveFileName }
+
+    from(jarFile)
+    into(modsDir)
+
+    doFirst {
+        val dir = file(modsDir)
+        if (!dir.isDirectory) {
+            throw GradleException("Prism mods dir not found: $modsDir\nPass -Pprism_mods_dir=/path/to/mods to override.")
+        }
+        // Remove previously deployed jars so a renamed/versioned build doesn't leave stale copies.
+        dir.listFiles { f -> f.name.startsWith("$baseName-") && f.extension == "jar" }
+            ?.forEach { it.delete() }
+    }
+
+    doLast {
+        logger.lifecycle("Deployed ${jarName.get()} -> $modsDir")
     }
 }

@@ -308,6 +308,16 @@ class NPCMessageParserClient : ClientModInitializer {
                 ),
             )
 
+        // DM Control Panel toggle (default: J)
+        val dmPanelKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.dm_panel",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_J,
+                    "key.categories.storyclient",
+                ),
+            )
+
         // Permission toast keybinds (defaults: G=accept, H=deny). Registered via
         // KeyBindingHelper inside the helper so the category appears in Options.
         com.canefe.storyclient.client.permission.PermissionKeybinds.register()
@@ -372,6 +382,11 @@ class NPCMessageParserClient : ClientModInitializer {
                 com.canefe.storyclient.client.squad.SquadCommandState.toggleCommandMode()
             }
 
+            // DM Control Panel toggle: edge-triggered on J press.
+            while (dmPanelKey.wasPressed()) {
+                com.canefe.storyclient.client.dm.DMPanelManager.toggle()
+            }
+
             // Directional combat: mouse-drag input capture + feint key edge.
             com.canefe.storyclient.client.combat.DirectionInputCapture.tick()
             while (liveAimKey.wasPressed()) {
@@ -403,6 +418,9 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.combat.ParryFlashHud.render(ctx)
             com.canefe.storyclient.client.combat.OutcomeBannerHud.render(ctx)
         }
+        // NOTE: DM Control Panel (ImGui) is NOT rendered from HudRenderCallback —
+        // see MinecraftClientImGuiMixin, which mirrors Axiom's `runTick` injection
+        // after RenderTarget.blitToScreen so ImGui draws onto a clean GL state.
 
         // Register world render event for BubbleRenderer + squad badges + formation preview
         WorldRenderEvents.AFTER_ENTITIES.register { context ->

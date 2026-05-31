@@ -33,7 +33,7 @@ import kotlin.math.min
 object EmoteRenderer {
 
     const val RISE_MS = 350L
-    const val HOLD_MS = 900L
+    const val HOLD_MS = 2500L
     const val EXIT_MS = 400L
     const val TOTAL_MS = RISE_MS + HOLD_MS + EXIT_MS
 
@@ -92,7 +92,7 @@ object EmoteRenderer {
             val ey = entity.y + entity.height + 0.5 + rise
             val ez = entity.z
 
-            val half = 0.4f
+            val half = 0.125f
 
             matrices.push()
             matrices.translate(ex - camPos.x, ey - camPos.y, ez - camPos.z)
