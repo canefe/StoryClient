@@ -83,6 +83,12 @@ dependencies {
     runtimeOnly(imguiWin,    excludeLwjgl);     include(imguiWin)
     runtimeOnly(imguiLinux,  excludeLwjgl);     include(imguiLinux)
     runtimeOnly(imguiMac,    excludeLwjgl);     include(imguiMac)
+
+    testImplementation(kotlin("test"))
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }
 
 tasks.processResources {
