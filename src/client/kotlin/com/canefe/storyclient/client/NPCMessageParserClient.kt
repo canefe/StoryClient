@@ -218,6 +218,9 @@ class NPCMessageParserClient : ClientModInitializer {
         // Permission gate toast (s2c prompt, c2s accept/deny)
         com.canefe.storyclient.client.permission.PermissionPacketReceiver.register()
 
+        // Player hediff HUD (s2c)
+        com.canefe.storyclient.client.hediff.HediffPacketReceiver.register()
+
         // Directional combat: register all C2S and S2C payloads.
         PayloadTypeRegistry.playC2S().register(
             com.canefe.storyclient.client.combat.SwingIntentPayload.ID,
@@ -417,6 +420,7 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.combat.DirectionCommitHud.render(ctx)
             com.canefe.storyclient.client.combat.ParryFlashHud.render(ctx)
             com.canefe.storyclient.client.combat.OutcomeBannerHud.render(ctx)
+            com.canefe.storyclient.client.hediff.HediffHud.render(ctx)
         }
         // NOTE: DM Control Panel (ImGui) is NOT rendered from HudRenderCallback —
         // see MinecraftClientImGuiMixin, which mirrors Axiom's `runTick` injection
