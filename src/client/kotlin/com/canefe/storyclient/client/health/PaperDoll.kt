@@ -106,7 +106,10 @@ object PaperDoll {
             }
         }
 
-        // Advance cursor past the figure so following content doesn't overlap.
+        // Overlay injured internal organs at their anatomical positions (same box).
+        OrganRow.render(injuredWireParts, originX, originY, boxW, boxH)
+
+        // Advance cursor past the figure box so following content doesn't overlap.
         ImGui.setCursorPos(originX, originY + boxH)
     }
 }

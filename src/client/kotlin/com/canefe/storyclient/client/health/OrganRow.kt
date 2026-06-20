@@ -5,26 +5,37 @@ import net.minecraft.client.MinecraftClient
 import net.minecraft.util.Identifier
 
 /**
- * Internal-organ strip shown under the paper-doll. Organs live inside the torso
- * and can't be drawn on the outer silhouette, so the sim's internal body parts
- * (heart/lung/brain/…) get their own row of icons, tinted red when injured.
- * Uses the "Nice Health Tab" mod's organs/ art. Each entry maps the sim wire
- * part id(s) to an icon; paired organs (lungs/kidneys) share one icon and tint
- * if either side is hurt.
+ * Internal organs overlaid ON the figure at their anatomical positions (lungs in
+ * the chest, heart, liver, kidneys, stomach, brain), ported from the "Nice
+ * Health Tab" mod's `MaleOrgans.xml`. Like the mod, an organ is drawn ONLY when
+ * it has a hediff (`visibleByDefault=false`) — healthy internals stay hidden so
+ * the silhouette reads cleanly. Drawn into the SAME box coordinates as
+ * [PaperDoll] so positions line up; [PaperDoll] calls this after the body.
  */
 object OrganRow {
     private const val BASE = "textures/health/organs"
 
-    /** display icon size; aspect derived from the native art. */
-    private data class Organ(val file: String, val aspect: Float, val wireParts: Set<String>)
+    /** fx/fy/fw fractions of the figure box; aspect = nativeW/nativeH; flip = mirror. */
+    private data class OrganPiece(
+        val file: String,
+        val fx: Float,
+        val fy: Float,
+        val fw: Float,
+        val aspect: Float,
+        val flip: Boolean = false,
+        val wireParts: Set<String>,
+    )
 
+    // Positions converted from MaleOrgans.xml (center-origin, +y down, box 360×910).
     private val organs = listOf(
-        Organ("brain", 128f / 64f, setOf("brain")),
-        Organ("heart", 1f, setOf("heart")),
-        Organ("lung", 128f / 256f, setOf("left_lung", "right_lung")),
-        Organ("liver", 128f / 64f, setOf("liver")),
-        Organ("kidney", 64f / 128f, setOf("left_kidney", "right_kidney")),
-        Organ("stomach", 1f, setOf("stomach", "intestines")),
+        OrganPiece("lung", 0.4131f, 0.1175f, 0.3378f, 0.5000f, wireParts = setOf("right_lung")),
+        OrganPiece("lung", 0.2492f, 0.1175f, 0.3378f, 0.5000f, flip = true, wireParts = setOf("left_lung")),
+        OrganPiece("heart", 0.3581f, 0.2493f, 0.3200f, 1.0000f, wireParts = setOf("heart")),
+        OrganPiece("stomach", 0.3858f, 0.3180f, 0.3200f, 1.0000f, wireParts = setOf("stomach", "intestines")),
+        OrganPiece("liver", 0.2525f, 0.3376f, 0.3200f, 2.0000f, wireParts = setOf("liver")),
+        OrganPiece("kidney", 0.5325f, 0.3708f, 0.1600f, 0.5000f, wireParts = setOf("right_kidney")),
+        OrganPiece("kidney", 0.3075f, 0.3708f, 0.1600f, 0.5000f, flip = true, wireParts = setOf("left_kidney")),
+        OrganPiece("brain", 0.3222f, 0.0286f, 0.3556f, 2.0000f, wireParts = setOf("brain")),
     )
 
     private fun glId(file: String): Long {
@@ -34,24 +45,30 @@ object OrganRow {
         return tm.getTexture(id).glId.toLong()
     }
 
-    /** Draw the organ icons at the current cursor, tinting any injured organ. */
-    fun render(injuredWireParts: Set<String>, iconH: Float = 26f) {
-        var first = true
+    /**
+     * Overlay injured organs onto the figure. [originX]/[originY]/[boxW]/[boxH]
+     * are PaperDoll's box; only organs whose wire part is in [injuredWireParts]
+     * are drawn (tinted red), matching the mod's injured-only behavior.
+     */
+    fun render(
+        injuredWireParts: Set<String>,
+        originX: Float,
+        originY: Float,
+        boxW: Float,
+        boxH: Float,
+    ) {
         for (o in organs) {
+            if (o.wireParts.none { it in injuredWireParts }) continue // healthy → hidden
             val tid = glId(o.file)
             if (tid <= 0L) continue
-            if (!first) ImGui.sameLine()
-            first = false
 
-            val h = iconH
-            val w = h * o.aspect
-            val injured = o.wireParts.any { it in injuredWireParts }
-            if (injured) {
-                ImGui.image(tid, w, h, 0f, 0f, 1f, 1f, 1f, 0.35f, 0.35f, 1f)
-            } else {
-                // Dim healthy organs so injured ones pop.
-                ImGui.image(tid, w, h, 0f, 0f, 1f, 1f, 0.55f, 0.55f, 0.55f, 1f)
-            }
+            val w = o.fw * boxW
+            val h = w / o.aspect
+            ImGui.setCursorPos(originX + o.fx * boxW, originY + o.fy * boxH)
+            val u0 = if (o.flip) 1f else 0f
+            val u1 = if (o.flip) 0f else 1f
+            // Injured organ: red tint (drawn only when injured anyway).
+            ImGui.image(tid, w, h, u0, 0f, u1, 1f, 1f, 0.3f, 0.3f, 1f)
         }
     }
 }
