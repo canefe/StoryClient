@@ -201,6 +201,17 @@ class NPCMessageParserClient : ClientModInitializer {
             EmoteRenderer.onEmote(payload.entityId, payload.emoteId)
         }
 
+        // NPC FOV cone overlay (s2c)
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.perception.NpcFovConePayload.ID,
+            com.canefe.storyclient.client.perception.NpcFovConePayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.perception.NpcFovConePayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.perception.FovConeStore.replaceAll(payload.enabled, payload.cones)
+        }
+
         // Sim item-transfer hologram (s2c)
         PayloadTypeRegistry.playS2C().register(
             com.canefe.storyclient.client.sim.ItemTransferPayload.ID,
@@ -436,6 +447,7 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.puppet.PuppetCursorRenderer.render(context)
             com.canefe.storyclient.client.recognition.HelixNametagRenderer.render(context)
             com.canefe.storyclient.client.sim.ItemHologramRenderer.render(context)
+            com.canefe.storyclient.client.perception.FovConeRenderer.render(context)
         }
 
         // Fix Dialogue command (that removes session, removes buggy dialog box)
