@@ -45,6 +45,7 @@ object HediffPacketReceiver {
         val label: String = "",
         val stage: String = "Minor",
         val description: String = "",
+        val bodyPart: String = "",
     )
 
     @Serializable
@@ -76,6 +77,7 @@ object HediffPacketReceiver {
                     label = it.label,
                     stage = it.stage,
                     description = it.description,
+                    bodyPart = it.bodyPart,
                 )
             },
         )

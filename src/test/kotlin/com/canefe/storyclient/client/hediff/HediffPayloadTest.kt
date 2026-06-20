@@ -22,4 +22,14 @@ class HediffPayloadTest {
         )
         assertEquals(0, payload.hediffs.size)
     }
+
+    @Test
+    fun decodes_bodyPart_and_defaults_empty() {
+        val withPart = """{"hediffs":[{"id":"cut","severity":0.3,"label":"Cut","stage":"Minor","description":"","bodyPart":"left_arm"}]}"""
+        val withoutPart = """{"hediffs":[{"id":"malnutrition","severity":0.5,"label":"Malnutrition","stage":"Serious","description":"Weakened."}]}"""
+        val a = HediffPacketReceiver.json.decodeFromString(HediffPacketReceiver.HediffsDTO.serializer(), withPart)
+        val b = HediffPacketReceiver.json.decodeFromString(HediffPacketReceiver.HediffsDTO.serializer(), withoutPart)
+        assertEquals("left_arm", a.hediffs[0].bodyPart)
+        assertEquals("", b.hediffs[0].bodyPart)
+    }
 }
