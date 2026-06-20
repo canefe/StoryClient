@@ -172,6 +172,10 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.health.HediffWatchPayload.ID,
             com.canefe.storyclient.client.health.HediffWatchPayload.CODEC,
         )
+        PayloadTypeRegistry.playC2S().register(
+            com.canefe.storyclient.client.health.TendWoundPayload.ID,
+            com.canefe.storyclient.client.health.TendWoundPayload.CODEC,
+        )
 
         // Puppet group payload (s2c) and command payload (c2s)
         PayloadTypeRegistry.playS2C().register(
