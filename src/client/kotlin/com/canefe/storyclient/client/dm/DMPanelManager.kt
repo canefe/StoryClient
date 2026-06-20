@@ -4,6 +4,7 @@ import com.canefe.storyclient.client.dm.panels.ActionSenderPanel
 import com.canefe.storyclient.client.dm.panels.ActivePlanPanel
 import com.canefe.storyclient.client.dm.panels.CharacterListPanel
 import com.canefe.storyclient.client.dm.panels.InspectorPanel
+import com.canefe.storyclient.client.health.HealthPanel
 import imgui.ImFont
 import imgui.ImFontConfig
 import imgui.ImGui
@@ -78,7 +79,7 @@ object DMPanelManager {
      * the panel renders silently (no errors, no pixels).
      */
     fun render() {
-        if (!active) return
+        if (!active && !HealthPanel.isOpen()) return
         if (!initialized) init()
 
         // Frame order taken from FlorianMichael/fabric-imgui-example-mod (1.21.1):
@@ -98,16 +99,21 @@ object DMPanelManager {
         ImGuiInternal.dockBuilderGetCentralNode(dockId)
             .addLocalFlags(ImGuiDockNodeFlagsInternal.NoTabBar)
 
-        renderMenuBar()
-        panels.forEach { runCatching { it.render() } }
+        if (active) {
+            renderMenuBar()
+            panels.forEach { runCatching { it.render() } }
+        }
+        runCatching { HealthPanel.render() }
 
         ImGui.render()
         imguiGl3.renderDrawData(ImGui.getDrawData())
     }
 
     /** Should ImGui swallow this input frame? Mirrors Axiom's keybind gating. */
-    fun wantsMouse(): Boolean = active && initialized && getIO().wantCaptureMouse
-    fun wantsKeyboard(): Boolean = active && initialized && getIO().wantCaptureKeyboard
+    fun wantsMouse(): Boolean =
+        (active || HealthPanel.isOpen()) && initialized && getIO().wantCaptureMouse
+    fun wantsKeyboard(): Boolean =
+        (active || HealthPanel.isOpen()) && initialized && getIO().wantCaptureKeyboard
 
     fun shutdown() {
         if (!initialized) return

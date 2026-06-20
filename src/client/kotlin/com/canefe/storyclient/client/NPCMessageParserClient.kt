@@ -343,7 +343,17 @@ class NPCMessageParserClient : ClientModInitializer {
                 ),
             )
 
-        // Permission toast keybinds (defaults: G=accept, H=deny). Registered via
+        // Health window toggle (default: H)
+        val healthKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.health",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_H,
+                    "key.categories.storyclient",
+                ),
+            )
+
+        // Permission toast keybinds (defaults: G=accept, K=deny). Registered via
         // KeyBindingHelper inside the helper so the category appears in Options.
         com.canefe.storyclient.client.permission.PermissionKeybinds.register()
 
@@ -410,6 +420,11 @@ class NPCMessageParserClient : ClientModInitializer {
             // DM Control Panel toggle: edge-triggered on J press.
             while (dmPanelKey.wasPressed()) {
                 com.canefe.storyclient.client.dm.DMPanelManager.toggle()
+            }
+
+            // Health window toggle: edge-triggered on H press.
+            while (healthKey.wasPressed()) {
+                com.canefe.storyclient.client.health.HealthPanel.toggle()
             }
 
             // Directional combat: mouse-drag input capture + feint key edge.

@@ -25,14 +25,14 @@ object PermissionKeybinds {
 
     fun register() {
         // Defaults avoid existing StoryClient keybinds: feint=F, wheel=R,
-        // live-aim=V, squad-command=Y. G/H are unbound by vanilla and the
-        // mod, and sit adjacent on the home row for thumb-eye coordination.
-        // DMs can rebind in Options → Controls → Story Client.
+        // live-aim=V, squad-command=Y, dm-panel=J, health=H. accept=G and
+        // deny=K sit adjacent for thumb-eye coordination. Rebind in
+        // Options → Controls → Story Client.
         accept = KeyBindingHelper.registerKeyBinding(
             KeyBinding(ACCEPT_KEY, InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_G, CATEGORY),
         )
         deny = KeyBindingHelper.registerKeyBinding(
-            KeyBinding(DENY_KEY, InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_H, CATEGORY),
+            KeyBinding(DENY_KEY, InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, CATEGORY),
         )
     }
 
@@ -78,5 +78,5 @@ object PermissionKeybinds {
         if (::accept.isInitialized) accept.boundKeyLocalizedText.string else "G"
 
     fun denyBindingText(): String =
-        if (::deny.isInitialized) deny.boundKeyLocalizedText.string else "H"
+        if (::deny.isInitialized) deny.boundKeyLocalizedText.string else "K"
 }
