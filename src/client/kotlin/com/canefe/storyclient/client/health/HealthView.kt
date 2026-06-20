@@ -66,14 +66,13 @@ object HealthView {
                     ImGui.endTooltip()
                 }
                 if (e.tendedQuality > 0f) {
-                    ImGui.sameLine()
-                    ImGui.text("tended ${(e.tendedQuality * 100).toInt()}%")
+                    ImGui.textDisabled("tended ${(e.tendedQuality * 100).toInt()}%")
                 }
-                // Tend button: gated on holding medicine + wound not fully tended.
+                // Tend button on its own line (bar fills full width). Gated on
+                // holding medicine + wound not fully tended.
                 val medicine = MedicineInventory.bestHeld()
                 if (medicine != null && e.tendedQuality < 1f) {
-                    ImGui.sameLine()
-                    if (ImGui.button("Tend##${e.id}_${e.bodyPart}")) {
+                    if (ImGui.button("Tend with $medicine##${e.id}_${e.bodyPart}")) {
                         val key = if (e.bodyPart.isNotBlank()) "${e.id}@${e.bodyPart}" else e.id
                         TendWoundPayload.tend(key, medicine)
                     }
@@ -98,14 +97,14 @@ object HealthView {
                         ImGui.endTooltip()
                     }
                     if (e.tendedQuality > 0f) {
-                        ImGui.sameLine()
-                        ImGui.text("tended ${(e.tendedQuality * 100).toInt()}%")
+                        ImGui.textDisabled("tended ${(e.tendedQuality * 100).toInt()}%")
                     }
-                    // Tend button: gated on holding medicine + wound not fully tended.
+                    // Tend button on its own line (the severity bar above fills the
+                    // full content width, so a sameLine button would be off-screen).
+                    // Gated on holding medicine + wound not fully tended.
                     val medicine = MedicineInventory.bestHeld()
                     if (medicine != null && e.tendedQuality < 1f) {
-                        ImGui.sameLine()
-                        if (ImGui.button("Tend##${e.id}_${e.bodyPart}")) {
+                        if (ImGui.button("Tend with $medicine##${e.id}_${e.bodyPart}")) {
                             val key = if (e.bodyPart.isNotBlank()) "${e.id}@${e.bodyPart}" else e.id
                             TendWoundPayload.tend(key, medicine)
                         }
