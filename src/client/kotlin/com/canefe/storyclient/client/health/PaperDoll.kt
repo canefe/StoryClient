@@ -49,20 +49,20 @@ object PaperDoll {
     private val pieces = listOf(
         Piece("outline", "outline", -0.2111f, -0.0516f, 1.4222f, 0.5000f),
         Piece("torso", "torso", 0.1472f, 0.0571f, 0.7111f, 0.5000f, wireParts = setOf("torso", "chest", "tail")),
-        // Screen-RIGHT pieces. The doll faces the viewer (front view), so by
-        // mirror convention the character's LEFT limbs appear on the viewer's
-        // right — hence these carry the left_* wire parts.
-        Piece("upperarm", "upperarm", 0.6208f, 0.1324f, 0.3556f, 0.5000f, wireParts = setOf("left_arm")),
-        Piece("lowerarm", "lowerarm", 0.7056f, 0.2676f, 0.3556f, 0.5000f, wireParts = setOf("left_arm")),
-        Piece("hand", "hand", 0.6972f, 0.4423f, 0.3556f, 1.0000f, wireParts = setOf("left_hand", "left_claw")),
-        Piece("leg", "leg", 0.4583f, 0.4000f, 0.3556f, 0.2500f, wireParts = setOf("left_leg")),
-        Piece("feet", "feet", 0.5319f, 0.8764f, 0.3556f, 1.0000f, wireParts = setOf("left_foot")),
-        // Screen-LEFT pieces (same art mirrored) → the character's RIGHT limbs.
-        Piece("upperarm", "upperarm", 0.0236f, 0.1324f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("right_arm")),
-        Piece("lowerarm", "lowerarm", -0.0611f, 0.2676f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("right_arm")),
-        Piece("hand", "hand", -0.0528f, 0.4423f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("right_hand", "right_claw")),
-        Piece("leg", "leg", 0.1861f, 0.4000f, 0.3556f, 0.2500f, flip = true, wireParts = setOf("right_leg")),
-        Piece("feet", "feet", 0.1125f, 0.8764f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("right_foot")),
+        // Anatomical convention (matches the Nice Health Tab mod): the
+        // character's own RIGHT limbs sit at +x = screen-RIGHT. Mod's
+        // ShoulderRight is at x=+107.5 → screen-right carries right_*.
+        Piece("upperarm", "upperarm", 0.6208f, 0.1324f, 0.3556f, 0.5000f, wireParts = setOf("right_arm")),
+        Piece("lowerarm", "lowerarm", 0.7056f, 0.2676f, 0.3556f, 0.5000f, wireParts = setOf("right_arm")),
+        Piece("hand", "hand", 0.6972f, 0.4423f, 0.3556f, 1.0000f, wireParts = setOf("right_hand", "right_claw")),
+        Piece("leg", "leg", 0.4583f, 0.4000f, 0.3556f, 0.2500f, wireParts = setOf("right_leg")),
+        Piece("feet", "feet", 0.5319f, 0.8764f, 0.3556f, 1.0000f, wireParts = setOf("right_foot")),
+        // Screen-LEFT pieces (same art mirrored) → the character's LEFT limbs.
+        Piece("upperarm", "upperarm", 0.0236f, 0.1324f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("left_arm")),
+        Piece("lowerarm", "lowerarm", -0.0611f, 0.2676f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("left_arm")),
+        Piece("hand", "hand", -0.0528f, 0.4423f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("left_hand", "left_claw")),
+        Piece("leg", "leg", 0.1861f, 0.4000f, 0.3556f, 0.2500f, flip = true, wireParts = setOf("left_leg")),
+        Piece("feet", "feet", 0.1125f, 0.8764f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("left_foot")),
         // Center.
         Piece("neck", "neck", 0.3250f, 0.0835f, 0.3556f, 1.0000f, wireParts = setOf("neck")),
         Piece("head", "head", 0.3250f, -0.0456f, 0.3556f, 0.5000f, wireParts = setOf("head", "left_eye", "right_eye", "pointed_ears")),
