@@ -70,6 +70,7 @@ object NpcHediffCache {
                 stage = it.stage,
                 description = it.description,
                 bodyPart = it.bodyPart,
+                tendedQuality = it.tendedQuality,
             )
         }
     }

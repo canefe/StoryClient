@@ -116,4 +116,5 @@ data class HediffEntry(
     val stage: String,
     val description: String,
     val bodyPart: String,
+    val tendedQuality: Float,
 )

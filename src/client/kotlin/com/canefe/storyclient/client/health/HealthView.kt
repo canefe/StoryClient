@@ -56,6 +56,10 @@ object HealthView {
         } else {
             for (e in conditions) {
                 severityBar(e.label, HediffHudState.severityFraction(e))
+                if (e.tendedQuality > 0f) {
+                    ImGui.sameLine()
+                    ImGui.text("tended ${(e.tendedQuality * 100).toInt()}%")
+                }
             }
         }
 
