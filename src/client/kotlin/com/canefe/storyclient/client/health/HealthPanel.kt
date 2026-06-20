@@ -40,15 +40,22 @@ object HealthPanel {
         ImGui.popStyleColor()
     }
 
-    /** Map a wire body-part id to a male-doll piece to tint; null = no visible piece. */
+    /**
+     * Map a wire body-part id to a male-doll piece to tint. The sim's external
+     * (hittable) parts include eyes/ears/claws/tail (see story-sim body_part
+     * defs), so those fold onto the nearest visible piece rather than silently
+     * not highlighting. null = no piece (e.g. internal organs that shouldn't
+     * paint the figure).
+     */
     private fun dollPieceFor(part: String): String? = when (part) {
-        "head" -> "head"
+        "head", "left_eye", "right_eye", "pointed_ears" -> "head"
         "neck" -> "neck"
         "torso", "chest" -> "torso"
         "left_arm", "right_arm" -> "upperarm"
-        "left_hand", "right_hand" -> "hand"
+        "left_hand", "right_hand", "left_claw", "right_claw" -> "hand"
         "left_leg", "right_leg" -> "leg"
         "left_foot", "right_foot" -> "feet"
+        "tail" -> "torso"
         else -> null
     }
 
