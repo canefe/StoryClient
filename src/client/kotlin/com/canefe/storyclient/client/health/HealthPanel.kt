@@ -40,25 +40,6 @@ object HealthPanel {
         ImGui.popStyleColor()
     }
 
-    /**
-     * Map a wire body-part id to a male-doll piece to tint. The sim's external
-     * (hittable) parts include eyes/ears/claws/tail (see story-sim body_part
-     * defs), so those fold onto the nearest visible piece rather than silently
-     * not highlighting. null = no piece (e.g. internal organs that shouldn't
-     * paint the figure).
-     */
-    private fun dollPieceFor(part: String): String? = when (part) {
-        "head", "left_eye", "right_eye", "pointed_ears" -> "head"
-        "neck" -> "neck"
-        "torso", "chest" -> "torso"
-        "left_arm", "right_arm" -> "upperarm"
-        "left_hand", "right_hand", "left_claw", "right_claw" -> "hand"
-        "left_leg", "right_leg" -> "leg"
-        "left_foot", "right_foot" -> "feet"
-        "tail" -> "torso"
-        else -> null
-    }
-
     private fun prettyPart(part: String): String =
         part.split('_').joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
 
@@ -70,11 +51,12 @@ object HealthPanel {
             val all = HealthState.snapshot()
             val conditions = HealthState.wholeBody(all)
             val parts = HealthState.byPart(all)
-            val injured = parts.keys.mapNotNull { dollPieceFor(it) }.toSet()
 
             ImGui.columns(2, "health_cols", false)
             ImGui.setColumnWidth(0, 150f)
-            PaperDoll.render(injured, boxW = 130f)
+            // Pass the raw injured wire-part ids; PaperDoll maps each to the
+            // correct side-specific piece (left_arm tints only the left arm).
+            PaperDoll.render(parts.keys, boxW = 130f)
             ImGui.nextColumn()
 
             ImGui.text("Conditions")

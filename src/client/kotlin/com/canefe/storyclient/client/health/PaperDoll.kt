@@ -24,7 +24,13 @@ object PaperDoll {
     // Box is 360 wide × 910 tall (from Male.xml BoundingBox).
     private const val FIGURE_ASPECT = 360f / 910f // ≈ 0.3956
 
-    /** One composited piece. aspect = nativeWidth / nativeHeight; flip = mirror. */
+    /**
+     * One composited piece. aspect = nativeWidth / nativeHeight; flip = mirror.
+     * [wireParts] is the set of sim body-part ids this piece represents, so a
+     * left_arm injury tints ONLY the figure's left arm pieces (eyes/ears fold
+     * onto the head, claws onto the matching hand, tail onto the torso). Empty =
+     * never tints (outline, torso backdrop overlap).
+     */
     private data class Piece(
         val part: String,
         val file: String,
@@ -33,6 +39,7 @@ object PaperDoll {
         val fw: Float,
         val aspect: Float,
         val flip: Boolean = false,
+        val wireParts: Set<String> = emptySet(),
     )
 
     // Ordered by the mod's layer field (0=back). Values computed from Male.xml
@@ -41,19 +48,22 @@ object PaperDoll {
     // box (fx<0, fw>1) exactly as the source texture does.
     private val pieces = listOf(
         Piece("outline", "outline", -0.2111f, -0.0516f, 1.4222f, 0.5000f),
-        Piece("torso", "torso", 0.1472f, 0.0571f, 0.7111f, 0.5000f),
-        Piece("upperarm", "upperarm", 0.6208f, 0.1324f, 0.3556f, 0.5000f),                  // right
-        Piece("upperarm", "upperarm", 0.0236f, 0.1324f, 0.3556f, 0.5000f, flip = true),     // left
-        Piece("neck", "neck", 0.3250f, 0.0835f, 0.3556f, 1.0000f),
-        Piece("head", "head", 0.3250f, -0.0456f, 0.3556f, 0.5000f),
-        Piece("lowerarm", "lowerarm", 0.7056f, 0.2676f, 0.3556f, 0.5000f),                  // right
-        Piece("lowerarm", "lowerarm", -0.0611f, 0.2676f, 0.3556f, 0.5000f, flip = true),    // left
-        Piece("hand", "hand", 0.6972f, 0.4423f, 0.3556f, 1.0000f),
-        Piece("hand", "hand", -0.0528f, 0.4423f, 0.3556f, 1.0000f, flip = true),
-        Piece("leg", "leg", 0.4583f, 0.4000f, 0.3556f, 0.2500f),                            // right
-        Piece("leg", "leg", 0.1861f, 0.4000f, 0.3556f, 0.2500f, flip = true),               // left
-        Piece("feet", "feet", 0.5319f, 0.8764f, 0.3556f, 1.0000f),
-        Piece("feet", "feet", 0.1125f, 0.8764f, 0.3556f, 1.0000f, flip = true),
+        Piece("torso", "torso", 0.1472f, 0.0571f, 0.7111f, 0.5000f, wireParts = setOf("torso", "chest", "tail")),
+        // Right side (figure's right; screen-left).
+        Piece("upperarm", "upperarm", 0.6208f, 0.1324f, 0.3556f, 0.5000f, wireParts = setOf("right_arm")),
+        Piece("lowerarm", "lowerarm", 0.7056f, 0.2676f, 0.3556f, 0.5000f, wireParts = setOf("right_arm")),
+        Piece("hand", "hand", 0.6972f, 0.4423f, 0.3556f, 1.0000f, wireParts = setOf("right_hand", "right_claw")),
+        Piece("leg", "leg", 0.4583f, 0.4000f, 0.3556f, 0.2500f, wireParts = setOf("right_leg")),
+        Piece("feet", "feet", 0.5319f, 0.8764f, 0.3556f, 1.0000f, wireParts = setOf("right_foot")),
+        // Left side (figure's left; screen-right) — same art mirrored.
+        Piece("upperarm", "upperarm", 0.0236f, 0.1324f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("left_arm")),
+        Piece("lowerarm", "lowerarm", -0.0611f, 0.2676f, 0.3556f, 0.5000f, flip = true, wireParts = setOf("left_arm")),
+        Piece("hand", "hand", -0.0528f, 0.4423f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("left_hand", "left_claw")),
+        Piece("leg", "leg", 0.1861f, 0.4000f, 0.3556f, 0.2500f, flip = true, wireParts = setOf("left_leg")),
+        Piece("feet", "feet", 0.1125f, 0.8764f, 0.3556f, 1.0000f, flip = true, wireParts = setOf("left_foot")),
+        // Center.
+        Piece("neck", "neck", 0.3250f, 0.0835f, 0.3556f, 1.0000f, wireParts = setOf("neck")),
+        Piece("head", "head", 0.3250f, -0.0456f, 0.3556f, 0.5000f, wireParts = setOf("head", "left_eye", "right_eye", "pointed_ears")),
     )
 
     private fun glId(file: String): Long {
@@ -65,9 +75,11 @@ object PaperDoll {
 
     /**
      * Draw the composited figure at the current cursor, fitting within [boxW].
-     * [injuredParts] holds part ids to tint red.
+     * [injuredWireParts] holds the sim body-part ids currently injured (e.g.
+     * "left_arm"); a piece tints red only if it represents one of them, so the
+     * correct side lights up.
      */
-    fun render(injuredParts: Set<String>, boxW: Float = 120f) {
+    fun render(injuredWireParts: Set<String>, boxW: Float = 120f) {
         val boxH = boxW / FIGURE_ASPECT
         val originX = ImGui.getCursorPosX()
         val originY = ImGui.getCursorPosY()
@@ -84,7 +96,8 @@ object PaperDoll {
             val u0 = if (p.flip) 1f else 0f
             val u1 = if (p.flip) 0f else 1f
 
-            if (p.part in injuredParts) {
+            val injured = p.wireParts.any { it in injuredWireParts }
+            if (injured) {
                 ImGui.image(tid, w, h, u0, 0f, u1, 1f, 1f, 0.35f, 0.35f, 1f)
             } else {
                 ImGui.image(tid, w, h, u0, 0f, u1, 1f, 1f, 1f, 1f, 1f)
