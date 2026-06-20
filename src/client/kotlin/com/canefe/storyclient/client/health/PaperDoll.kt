@@ -20,7 +20,11 @@ object PaperDoll {
 
     private const val FIGURE_ASPECT = 0.5f // outline 512x1024
 
-    /** One composited piece. aspect = nativeWidth / nativeHeight. */
+    /**
+     * One composited piece. aspect = nativeWidth / nativeHeight. [flip]
+     * horizontally mirrors the art (the source limb pieces are drawn for the
+     * figure's right side; the left side reuses the same art mirrored).
+     */
     private data class Piece(
         val part: String,
         val file: String,
@@ -28,26 +32,29 @@ object PaperDoll {
         val fy: Float,
         val fw: Float,
         val aspect: Float,
+        val flip: Boolean = false,
     )
 
-    // Back→front. Offsets hand-tuned to the male pieces' native aspects:
-    // outline 0.5, torso 0.5, head 0.5, neck 1.0, upperarm/lowerarm 0.5,
-    // hand 1.0, leg 0.25, feet 1.0.
+    // Back→front. "right"/"left" are the FIGURE's sides (viewer sees right-figure
+    // on the left of the screen). Left-side limbs reuse the right art mirrored.
     private val pieces = listOf(
         Piece("outline", "outline", 0.00f, 0.00f, 1.00f, 0.50f),
-        Piece("leg", "leg", 0.34f, 0.55f, 0.16f, 0.25f),   // right leg
-        Piece("leg", "leg", 0.50f, 0.55f, 0.16f, 0.25f),   // left leg
-        Piece("torso", "torso", 0.30f, 0.20f, 0.40f, 0.50f),
-        Piece("upperarm", "upperarm", 0.18f, 0.22f, 0.16f, 0.50f), // right arm
-        Piece("upperarm", "upperarm", 0.66f, 0.22f, 0.16f, 0.50f), // left arm
-        Piece("lowerarm", "lowerarm", 0.16f, 0.36f, 0.15f, 0.50f),
-        Piece("lowerarm", "lowerarm", 0.69f, 0.36f, 0.15f, 0.50f),
-        Piece("hand", "hand", 0.15f, 0.50f, 0.12f, 1.00f),
-        Piece("hand", "hand", 0.73f, 0.50f, 0.12f, 1.00f),
-        Piece("feet", "feet", 0.33f, 0.92f, 0.14f, 1.00f),
-        Piece("feet", "feet", 0.53f, 0.92f, 0.14f, 1.00f),
-        Piece("neck", "neck", 0.43f, 0.16f, 0.14f, 1.00f),
-        Piece("head", "head", 0.36f, 0.02f, 0.28f, 0.50f),
+        // Legs seated onto the outline's legs.
+        Piece("leg", "leg", 0.36f, 0.52f, 0.15f, 0.25f),                 // right leg
+        Piece("leg", "leg", 0.49f, 0.52f, 0.15f, 0.25f, flip = true),    // left leg
+        Piece("torso", "torso", 0.31f, 0.18f, 0.38f, 0.50f),
+        // Arms hang down along the torso: upper from shoulder, lower below it,
+        // hand at the bottom — tucked closer in than before.
+        Piece("upperarm", "upperarm", 0.22f, 0.20f, 0.14f, 0.50f),               // right
+        Piece("upperarm", "upperarm", 0.64f, 0.20f, 0.14f, 0.50f, flip = true),  // left
+        Piece("lowerarm", "lowerarm", 0.21f, 0.33f, 0.13f, 0.50f),
+        Piece("lowerarm", "lowerarm", 0.66f, 0.33f, 0.13f, 0.50f, flip = true),
+        Piece("hand", "hand", 0.21f, 0.45f, 0.11f, 1.00f),
+        Piece("hand", "hand", 0.68f, 0.45f, 0.11f, 1.00f, flip = true),
+        Piece("feet", "feet", 0.36f, 0.93f, 0.12f, 1.00f),
+        Piece("feet", "feet", 0.52f, 0.93f, 0.12f, 1.00f, flip = true),
+        Piece("neck", "neck", 0.44f, 0.15f, 0.12f, 1.00f),
+        Piece("head", "head", 0.37f, 0.01f, 0.26f, 0.50f),
     )
 
     private fun glId(file: String): Long {
@@ -74,10 +81,14 @@ object PaperDoll {
             val h = w / p.aspect
             ImGui.setCursorPos(originX + p.fx * boxW, originY + p.fy * boxH)
 
+            // Horizontal mirror = swap the U coords (u0=1, u1=0).
+            val u0 = if (p.flip) 1f else 0f
+            val u1 = if (p.flip) 0f else 1f
+
             if (p.part in injuredParts) {
-                ImGui.image(tid, w, h, 0f, 0f, 1f, 1f, 1f, 0.35f, 0.35f, 1f)
+                ImGui.image(tid, w, h, u0, 0f, u1, 1f, 1f, 0.35f, 0.35f, 1f)
             } else {
-                ImGui.image(tid, w, h, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f)
+                ImGui.image(tid, w, h, u0, 0f, u1, 1f, 1f, 1f, 1f, 1f)
             }
         }
 
