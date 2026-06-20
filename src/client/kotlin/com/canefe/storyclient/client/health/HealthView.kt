@@ -46,6 +46,8 @@ object HealthView {
         // Raw injured wire-part ids; PaperDoll maps each to the correct
         // side-specific piece (left_arm tints only the left arm).
         PaperDoll.render(parts.keys, boxW = 130f)
+        // Internal organs can't show on the silhouette — strip below the figure.
+        OrganRow.render(parts.keys)
         ImGui.nextColumn()
 
         ImGui.text("Conditions")
