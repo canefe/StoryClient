@@ -27,6 +27,19 @@ object HealthPanel {
         return floatArrayOf(r, g, 0.15f)
     }
 
+    /**
+     * One labeled severity row: the name on its own line, then a color-coded bar
+     * whose only overlay is the percentage. Keeping the name out of the bar
+     * avoids the label colliding with the fill at low fractions.
+     */
+    private fun severityBar(label: String, frac: Float) {
+        ImGui.text(label)
+        val col = severityColor(frac)
+        ImGui.pushStyleColor(ImGuiCol.PlotHistogram, col[0], col[1], col[2], 1f)
+        ImGui.progressBar(frac, -1f, 14f, "${(frac * 100).toInt()}%")
+        ImGui.popStyleColor()
+    }
+
     /** Map a wire body-part id to a male-doll piece to tint; null = no visible piece. */
     private fun dollPieceFor(part: String): String? = when (part) {
         "head" -> "head"
@@ -53,8 +66,8 @@ object HealthPanel {
             val injured = parts.keys.mapNotNull { dollPieceFor(it) }.toSet()
 
             ImGui.columns(2, "health_cols", false)
-            ImGui.setColumnWidth(0, 140f)
-            PaperDoll.render(injured)
+            ImGui.setColumnWidth(0, 150f)
+            PaperDoll.render(injured, boxW = 130f)
             ImGui.nextColumn()
 
             ImGui.text("Conditions")
@@ -63,11 +76,7 @@ object HealthPanel {
                 ImGui.textDisabled("Healthy.")
             } else {
                 for (e in conditions) {
-                    val frac = HediffHudState.severityFraction(e)
-                    val col = severityColor(frac)
-                    ImGui.pushStyleColor(ImGuiCol.PlotHistogram, col[0], col[1], col[2], 1f)
-                    ImGui.progressBar(frac, 220f, 16f, "${e.label}  ${(frac * 100).toInt()}%")
-                    ImGui.popStyleColor()
+                    severityBar(e.label, HediffHudState.severityFraction(e))
                 }
             }
 
@@ -77,8 +86,7 @@ object HealthPanel {
                 for ((part, list) in parts) {
                     ImGui.textDisabled(prettyPart(part))
                     for (e in list) {
-                        val frac = HediffHudState.severityFraction(e)
-                        ImGui.bulletText("${e.label}  ${(frac * 100).toInt()}%")
+                        severityBar(e.label, HediffHudState.severityFraction(e))
                     }
                 }
             }
