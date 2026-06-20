@@ -88,6 +88,28 @@ object HealthView {
                 ImGui.textDisabled(prettyPart(part))
                 for (e in list) {
                     severityBar(e.label, HediffHudState.severityFraction(e))
+                    // Tooltip on hover: wound details over the severity bar.
+                    if (ImGui.isItemHovered()) {
+                        ImGui.beginTooltip()
+                        ImGui.text(e.label)
+                        ImGui.text("severity ${(HediffHudState.severityFraction(e) * 100).toInt()}%")
+                        if (e.bodyPart.isNotBlank()) ImGui.text("part: ${prettyPart(e.bodyPart)}")
+                        ImGui.text("tended ${(e.tendedQuality * 100).toInt()}%")
+                        ImGui.endTooltip()
+                    }
+                    if (e.tendedQuality > 0f) {
+                        ImGui.sameLine()
+                        ImGui.text("tended ${(e.tendedQuality * 100).toInt()}%")
+                    }
+                    // Tend button: gated on holding medicine + wound not fully tended.
+                    val medicine = MedicineInventory.bestHeld()
+                    if (medicine != null && e.tendedQuality < 1f) {
+                        ImGui.sameLine()
+                        if (ImGui.button("Tend##${e.id}_${e.bodyPart}")) {
+                            val key = if (e.bodyPart.isNotBlank()) "${e.id}@${e.bodyPart}" else e.id
+                            TendWoundPayload.tend(key, medicine)
+                        }
+                    }
                 }
             }
         }
