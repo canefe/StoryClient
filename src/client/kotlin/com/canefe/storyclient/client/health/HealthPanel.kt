@@ -27,6 +27,21 @@ object HealthPanel {
         return floatArrayOf(r, g, 0.15f)
     }
 
+    /** Map a wire body-part id to a male-doll piece to tint; null = no visible piece. */
+    private fun dollPieceFor(part: String): String? = when (part) {
+        "head" -> "head"
+        "neck" -> "neck"
+        "torso", "chest" -> "torso"
+        "left_arm", "right_arm" -> "upperarm"
+        "left_hand", "right_hand" -> "hand"
+        "left_leg", "right_leg" -> "leg"
+        "left_foot", "right_foot" -> "feet"
+        else -> null
+    }
+
+    private fun prettyPart(part: String): String =
+        part.split('_').joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+
     fun render() {
         if (!open.get()) return
         val font = DMPanelManager.interFont
@@ -34,6 +49,14 @@ object HealthPanel {
         if (ImGui.begin("Health###StoryHealth", open)) {
             val all = HealthState.snapshot()
             val conditions = HealthState.wholeBody(all)
+            val parts = HealthState.byPart(all)
+            val injured = parts.keys.mapNotNull { dollPieceFor(it) }.toSet()
+
+            ImGui.columns(2, "health_cols", false)
+            ImGui.setColumnWidth(0, 140f)
+            PaperDoll.render(injured)
+            ImGui.nextColumn()
+
             ImGui.text("Conditions")
             ImGui.separator()
             if (conditions.isEmpty()) {
@@ -47,6 +70,19 @@ object HealthPanel {
                     ImGui.popStyleColor()
                 }
             }
+
+            if (parts.isNotEmpty()) {
+                ImGui.separator()
+                ImGui.text("Injuries")
+                for ((part, list) in parts) {
+                    ImGui.textDisabled(prettyPart(part))
+                    for (e in list) {
+                        val frac = HediffHudState.severityFraction(e)
+                        ImGui.bulletText("${e.label}  ${(frac * 100).toInt()}%")
+                    }
+                }
+            }
+            ImGui.columns(1)
         }
         ImGui.end()
         if (font != null) ImGui.popFont()
