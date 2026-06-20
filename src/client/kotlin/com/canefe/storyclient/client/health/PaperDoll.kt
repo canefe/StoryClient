@@ -5,26 +5,26 @@ import net.minecraft.client.MinecraftClient
 import net.minecraft.util.Identifier
 
 /**
- * Layered male paper-doll. The source RimWorld pieces are different pixel sizes
- * and are meant to be composited at anatomical positions, NOT stretched to a
- * common box — doing the latter smashes every limb onto the torso.
+ * Layered male paper-doll. Geometry is ported verbatim from the "Nice Health
+ * Tab" RimWorld mod's `Defs/Baseliner/Male/Male.xml` (HumanlikeDoll +
+ * DollBodyPart), so the pieces composite exactly as the original art was
+ * authored — instead of being hand-eyeballed onto the outline.
  *
- * Each piece is placed as fractions of the figure box: [fx],[fy] is the
- * top-left as a fraction of figure width/height, [fw] is the width as a
- * fraction of figure width, and the height is derived from the piece's native
- * aspect ratio so nothing is distorted. The figure box itself is sized off the
- * `outline` reference (512x1024 → aspect 0.5).
+ * The mod uses a center-origin, +y-DOWN pixel space with a bounding box of
+ * x∈[-180,180], y∈[-465,445] (360×910). Each part's `position` is the piece
+ * CENTER and `width/height = -1` means mirror (the figure's left side reuses
+ * the right art flipped). We convert all of that to top-left fractions of the
+ * box here: fx/fy = top-left as a fraction of box w/h, fw = width as a fraction
+ * of box width, aspect = nativeW/nativeH (height derived so nothing distorts),
+ * flip = horizontal mirror.
  */
 object PaperDoll {
     private const val BASE = "textures/health/baseliner/male"
 
-    private const val FIGURE_ASPECT = 0.5f // outline 512x1024
+    // Box is 360 wide × 910 tall (from Male.xml BoundingBox).
+    private const val FIGURE_ASPECT = 360f / 910f // ≈ 0.3956
 
-    /**
-     * One composited piece. aspect = nativeWidth / nativeHeight. [flip]
-     * horizontally mirrors the art (the source limb pieces are drawn for the
-     * figure's right side; the left side reuses the same art mirrored).
-     */
+    /** One composited piece. aspect = nativeWidth / nativeHeight; flip = mirror. */
     private data class Piece(
         val part: String,
         val file: String,
@@ -35,26 +35,25 @@ object PaperDoll {
         val flip: Boolean = false,
     )
 
-    // Back→front. "right"/"left" are the FIGURE's sides (viewer sees right-figure
-    // on the left of the screen). Left-side limbs reuse the right art mirrored.
+    // Ordered by the mod's layer field (0=back). Values computed from Male.xml
+    // centers/sizes; "right"/"left" are the FIGURE's sides. The outline is the
+    // mod's separate outlinePath, drawn first as the backdrop — it overhangs the
+    // box (fx<0, fw>1) exactly as the source texture does.
     private val pieces = listOf(
-        Piece("outline", "outline", 0.00f, 0.00f, 1.00f, 0.50f),
-        // Legs seated onto the outline's legs.
-        Piece("leg", "leg", 0.36f, 0.52f, 0.15f, 0.25f),                 // right leg
-        Piece("leg", "leg", 0.49f, 0.52f, 0.15f, 0.25f, flip = true),    // left leg
-        Piece("torso", "torso", 0.31f, 0.18f, 0.38f, 0.50f),
-        // Arms hang down along the torso: upper from shoulder, lower below it,
-        // hand at the bottom — tucked closer in than before.
-        Piece("upperarm", "upperarm", 0.22f, 0.20f, 0.14f, 0.50f),               // right
-        Piece("upperarm", "upperarm", 0.64f, 0.20f, 0.14f, 0.50f, flip = true),  // left
-        Piece("lowerarm", "lowerarm", 0.21f, 0.33f, 0.13f, 0.50f),
-        Piece("lowerarm", "lowerarm", 0.66f, 0.33f, 0.13f, 0.50f, flip = true),
-        Piece("hand", "hand", 0.21f, 0.45f, 0.11f, 1.00f),
-        Piece("hand", "hand", 0.68f, 0.45f, 0.11f, 1.00f, flip = true),
-        Piece("feet", "feet", 0.36f, 0.93f, 0.12f, 1.00f),
-        Piece("feet", "feet", 0.52f, 0.93f, 0.12f, 1.00f, flip = true),
-        Piece("neck", "neck", 0.44f, 0.15f, 0.12f, 1.00f),
-        Piece("head", "head", 0.37f, 0.01f, 0.26f, 0.50f),
+        Piece("outline", "outline", -0.2111f, -0.0516f, 1.4222f, 0.5000f),
+        Piece("torso", "torso", 0.1472f, 0.0571f, 0.7111f, 0.5000f),
+        Piece("upperarm", "upperarm", 0.6208f, 0.1324f, 0.3556f, 0.5000f),                  // right
+        Piece("upperarm", "upperarm", 0.0236f, 0.1324f, 0.3556f, 0.5000f, flip = true),     // left
+        Piece("neck", "neck", 0.3250f, 0.0835f, 0.3556f, 1.0000f),
+        Piece("head", "head", 0.3250f, -0.0456f, 0.3556f, 0.5000f),
+        Piece("lowerarm", "lowerarm", 0.7056f, 0.2676f, 0.3556f, 0.5000f),                  // right
+        Piece("lowerarm", "lowerarm", -0.0611f, 0.2676f, 0.3556f, 0.5000f, flip = true),    // left
+        Piece("hand", "hand", 0.6972f, 0.4423f, 0.3556f, 1.0000f),
+        Piece("hand", "hand", -0.0528f, 0.4423f, 0.3556f, 1.0000f, flip = true),
+        Piece("leg", "leg", 0.4583f, 0.4000f, 0.3556f, 0.2500f),                            // right
+        Piece("leg", "leg", 0.1861f, 0.4000f, 0.3556f, 0.2500f, flip = true),               // left
+        Piece("feet", "feet", 0.5319f, 0.8764f, 0.3556f, 1.0000f),
+        Piece("feet", "feet", 0.1125f, 0.8764f, 0.3556f, 1.0000f, flip = true),
     )
 
     private fun glId(file: String): Long {
