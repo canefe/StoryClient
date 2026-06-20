@@ -23,6 +23,10 @@ object StoryClientConfig {
     // this toggle is a purely cosmetic local filter.
     var dmRevealRealNames: Boolean = true
 
+    // FOV perception overlay (/story debug fov): false = flat 2D ground wedge,
+    // true = solid 3D cone matching the server's pitch-aware inFov.
+    var fovCone3D: Boolean = false
+
     private val gson = Gson()
     private val configFile = File("config/storyclient.json")
 
@@ -42,6 +46,7 @@ object StoryClientConfig {
             combatSlowMoEnabled = loaded.combatSlowMoEnabled
             combatScreenShakeIntensity = loaded.combatScreenShakeIntensity
             dmRevealRealNames = loaded.dmRevealRealNames
+            fovCone3D = loaded.fovCone3D
         }
     }
 
@@ -50,7 +55,7 @@ object StoryClientConfig {
             modEnabled, messageVanishTime, dialogueScale, dialogueYOffset,
             useBubbleRenderer, use3DAudio, maxAudioDistance, minAudioDistance,
             combatParryWindowScale, combatSlowMoEnabled, combatScreenShakeIntensity,
-            dmRevealRealNames
+            dmRevealRealNames, fovCone3D
         )
         configFile.parentFile.mkdirs()
         configFile.writeText(gson.toJson(data))
@@ -69,5 +74,6 @@ object StoryClientConfig {
         val combatSlowMoEnabled: Boolean = true,
         val combatScreenShakeIntensity: Float = 1.0f,
         val dmRevealRealNames: Boolean = true,
+        val fovCone3D: Boolean = false,
     )
 }

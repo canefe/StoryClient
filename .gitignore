@@ -120,3 +120,4 @@ runs/
 
 # Kotlin compiler session scratch
 .kotlin/
+.superpowers/

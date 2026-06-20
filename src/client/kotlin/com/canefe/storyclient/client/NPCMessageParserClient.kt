@@ -100,6 +100,17 @@ class NPCMessageParserClient : ClientModInitializer {
 
         println("✅ Registered modern audio receiver")
 
+        // Pause state (s2c) — freezes player movement while the sim is paused
+        PayloadTypeRegistry.playS2C().register(
+            com.canefe.storyclient.client.pause.PauseStatePayload.ID,
+            com.canefe.storyclient.client.pause.PauseStatePayload.CODEC,
+        )
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.canefe.storyclient.client.pause.PauseStatePayload.ID,
+        ) { payload, _ ->
+            com.canefe.storyclient.client.pause.PauseState.paused = payload.paused
+        }
+
         // Register Story nearby-NPCs payload + receiver (powers the action wheel)
         PayloadTypeRegistry.playS2C().register(
             com.canefe.storyclient.client.wheel.NearbyNPCPayload.ID,
@@ -432,6 +443,7 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.combat.ParryFlashHud.render(ctx)
             com.canefe.storyclient.client.combat.OutcomeBannerHud.render(ctx)
             com.canefe.storyclient.client.hediff.HediffHud.render(ctx)
+            com.canefe.storyclient.client.pause.PauseOverlayHud.render(ctx)
         }
         // NOTE: DM Control Panel (ImGui) is NOT rendered from HudRenderCallback —
         // see MinecraftClientImGuiMixin, which mirrors Axiom's `runTick` injection

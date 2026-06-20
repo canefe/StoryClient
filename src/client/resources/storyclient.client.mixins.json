@@ -13,6 +13,7 @@
     "MouseMixin",
     "MouseButtonMixin",
     "RightClickPuppetMixin",
+    "PlayerFreezeMixin",
     "KeyboardMixin",
     "MinecraftClientImGuiMixin",
     "TextSerializationAccessor"

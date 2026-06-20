@@ -23,4 +23,33 @@ class FovConeGeometryTest {
         assert(abs(mx.toDouble()) < 1e-3) { "mid x should be ~0, was $mx" }
         assert(abs(mz.toDouble() - 10.0) < 1e-3) { "mid z should be ~10, was $mz" }
     }
+
+    @Test
+    fun `facingVector matches MC yaw-pitch convention`() {
+        // yaw 0, pitch 0 → straight ahead = +Z.
+        val fwd = FovConeRenderer.facingVector(0.0, 0.0)
+        assert(abs(fwd.x) < 1e-6 && abs(fwd.y) < 1e-6 && abs(fwd.z - 1f) < 1e-6) { "fwd was $fwd" }
+
+        // pitch +90° (looking straight down) → -Y.
+        val down = FovConeRenderer.facingVector(0.0, Math.toRadians(90.0))
+        assert(abs(down.y + 1f) < 1e-5) { "looking down should be -Y, was $down" }
+    }
+
+    @Test
+    fun `cone ring points lie on sphere at fovHalfDeg from axis`() {
+        val axis = FovConeRenderer.facingVector(0.0, 0.0) // +Z
+        val half = 30f
+        val r = 12f
+        val ring = FovConeRenderer.conePoints(axis, fovHalfDeg = half, sightRange = r, steps = 16)
+        assertEquals(17, ring.size) // steps + 1 (closed ring)
+
+        val cosHalf = Math.cos(Math.toRadians(half.toDouble()))
+        for (p in ring) {
+            val mag = Math.sqrt((p.x.toDouble() * p.x + p.y.toDouble() * p.y + p.z.toDouble() * p.z))
+            assert(abs(mag - r.toDouble()) < 1e-3) { "ring point $p off radius: mag=$mag" }
+            // angle from axis (+Z) == fovHalfDeg → dot(axis, normalized) == cos(half).
+            val dot = p.z.toDouble() / mag
+            assert(abs(dot - cosHalf) < 1e-3) { "ring point $p not at $half° from axis: dot=$dot" }
+        }
+    }
 }

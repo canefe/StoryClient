@@ -76,6 +76,18 @@ object StoryClientConfigScreen {
                 .build()
         )
 
+        general.addEntry(
+            entryBuilder.startBooleanToggle(Text.literal("FOV Overlay: 3D Cone"), StoryClientConfig.fovCone3D)
+                .setDefaultValue(false)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.fovCone3D = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Render the /story debug fov perception overlay as a solid 3D cone (follows head pitch) instead of a flat 2D ground wedge"))
+                .build()
+        )
+
         // Audio Category
         val audio: ConfigCategory = builder.getOrCreateCategory(Text.literal("Audio"))
 
