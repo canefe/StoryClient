@@ -15,6 +15,7 @@ enum class DMPanelType(
 ) {
     CHARACTER_LIST("Characters", openByDefault = true),
     INSPECTOR("Inspector", openByDefault = true),
+    DM_HEALTH("Health", openByDefault = false),
     ACTIVE_PLAN("Active Plan", openByDefault = false),
     ACTION_SENDER("Send Action", openByDefault = false);
 

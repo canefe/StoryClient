@@ -3,6 +3,7 @@ package com.canefe.storyclient.client.dm
 import com.canefe.storyclient.client.dm.panels.ActionSenderPanel
 import com.canefe.storyclient.client.dm.panels.ActivePlanPanel
 import com.canefe.storyclient.client.dm.panels.CharacterListPanel
+import com.canefe.storyclient.client.dm.panels.DmHealthPanel
 import com.canefe.storyclient.client.dm.panels.InspectorPanel
 import com.canefe.storyclient.client.health.HealthPanel
 import imgui.ImFont
@@ -55,6 +56,7 @@ object DMPanelManager {
     private val panels: List<DMPanel> = listOf(
         CharacterListPanel,
         InspectorPanel,
+        DmHealthPanel,
         ActivePlanPanel,
         ActionSenderPanel,
     )
