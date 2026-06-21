@@ -4,7 +4,9 @@ import com.canefe.storyclient.client.dm.DMPanel
 import com.canefe.storyclient.client.dm.DMPanelType
 import com.canefe.storyclient.client.health.HealthView
 import com.canefe.storyclient.client.health.HediffWatchPayload
+import com.canefe.storyclient.client.health.NeedsView
 import com.canefe.storyclient.client.health.NpcHediffCache
+import com.canefe.storyclient.client.health.NpcNeedsCache
 import com.canefe.storyclient.client.wheel.NearbyNPCCache
 import imgui.ImGui
 
@@ -52,6 +54,9 @@ object DmHealthPanel : DMPanel {
                     ImGui.sameLine()
                     ImGui.textDisabled("(${entry.hp}/${entry.maxHp})")
                 }
+                ImGui.separator()
+                ImGui.text("Needs")
+                NeedsView.render(NpcNeedsCache.get(selected))
                 ImGui.separator()
                 HealthView.render(NpcHediffCache.get(selected))
             }

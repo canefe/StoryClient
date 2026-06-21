@@ -168,6 +168,8 @@ class NPCMessageParserClient : ClientModInitializer {
 
         // DM Health panel: selected-NPC hediffs (s2c) + watch command (c2s).
         com.canefe.storyclient.client.health.NpcHediffCache.register()
+        // DM Health panel: selected-NPC needs (s2c), rides the same DM watch.
+        com.canefe.storyclient.client.health.NpcNeedsCache.register()
         PayloadTypeRegistry.playC2S().register(
             com.canefe.storyclient.client.health.HediffWatchPayload.ID,
             com.canefe.storyclient.client.health.HediffWatchPayload.CODEC,
