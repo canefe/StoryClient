@@ -52,7 +52,16 @@ object SkillsPanel {
         HealthTheme.push()
         if (ImGui.begin("Skills###StorySkills", open)) {
             HealthTheme.drawFrame()
-            SkillsView.render(SkillsState.active)
+            // Guard the content render so a draw error can't skip ImGui.end()
+            // (which would imbalance the frame). Log the cause so it's diagnosable
+            // instead of silently swallowed by DMPanelManager's runCatching.
+            try {
+                SkillsView.render(SkillsState.active)
+            } catch (t: Throwable) {
+                println("[SkillsPanel] render failed: ${t.message}")
+                t.printStackTrace()
+                ImGui.textDisabled("render error")
+            }
         }
         ImGui.end()
         HealthTheme.pop()
