@@ -52,6 +52,7 @@ class NPCMessageParserClient : ClientModInitializer {
                 { buf ->
                     // Read all remaining bytes instead of expecting a size prefix
                     val remainingBytes = buf.readableBytes()
+                    println("🔍 [DBG] AudioPayload.CODEC decoding: readableBytes=$remainingBytes")
                     val audioData = ByteArray(remainingBytes)
                     buf.readBytes(audioData)
                     AudioPayload(audioData)
@@ -85,11 +86,26 @@ class NPCMessageParserClient : ClientModInitializer {
             try {
                 context.client().execute {
                     val (npcUuid, audioBytes) = extractNpcHeader(payload.audioData)
+
+                    // Reassemble chunks HERE, BEFORE the pacer. NpcEventPacer does
+                    // last-write-wins per NPC, so feeding it raw transport chunks
+                    // makes a later chunk overwrite an earlier one of the SAME audio
+                    // (the chunks share an npc id and arrive in the same bundle
+                    // window). Reassembling first means the pacer only ever sees a
+                    // COMPLETE audio. parseChunkedAudioData accumulates per audioId
+                    // and returns null until the final chunk completes the set.
+                    val completeAudio =
+                        if (isChunkedAudioData(audioBytes)) {
+                            parseChunkedAudioData(audioBytes) ?: return@execute // wait for more chunks
+                        } else {
+                            audioBytes
+                        }
+
                     if (npcUuid != null) {
-                        NpcEventPacer.onVoiceAudio(npcUuid, audioBytes)
+                        NpcEventPacer.onVoiceAudio(npcUuid, completeAudio)
                     } else {
                         // No uuid header — legacy path, play immediately.
-                        playAudio(audioBytes, null)
+                        playAudio(completeAudio, null)
                     }
                 }
             } catch (e: Exception) {
@@ -170,6 +186,8 @@ class NPCMessageParserClient : ClientModInitializer {
         com.canefe.storyclient.client.health.NpcHediffCache.register()
         // DM Health panel: selected-NPC needs (s2c), rides the same DM watch.
         com.canefe.storyclient.client.health.NpcNeedsCache.register()
+        // Player's own skills (s2c) → the Skills window.
+        com.canefe.storyclient.client.skills.SkillsPacketReceiver.register()
         PayloadTypeRegistry.playC2S().register(
             com.canefe.storyclient.client.health.HediffWatchPayload.ID,
             com.canefe.storyclient.client.health.HediffWatchPayload.CODEC,
@@ -366,6 +384,16 @@ class NPCMessageParserClient : ClientModInitializer {
                 ),
             )
 
+        // DEBUG: replay the spawn cinematic (default: B). For tuning the swoop.
+        val spawnCinematicReplayKey =
+            net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(
+                net.minecraft.client.option.KeyBinding(
+                    "key.storyclient.spawn_cinematic_replay",
+                    org.lwjgl.glfw.GLFW.GLFW_KEY_B,
+                    "key.categories.storyclient",
+                ),
+            )
+
         // Permission toast keybinds (defaults: G=accept, K=deny). Registered via
         // KeyBindingHelper inside the helper so the category appears in Options.
         com.canefe.storyclient.client.permission.PermissionKeybinds.register()
@@ -388,6 +416,13 @@ class NPCMessageParserClient : ClientModInitializer {
             org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE,
         )
         val decisionKeyDown = java.util.HashMap<Int, Boolean>()
+
+        // Tracks whether the Health panel was auto-opened by the inventory screen
+        // (E), so we only auto-close the copy we opened and never fight a manual
+        // H toggle. Also remembers the last inventory-open state for edge detection.
+        var healthOpenedByInventory = false
+        var skillsOpenedByInventory = false
+        var inventoryWasOpen = false
 
         // Register tick event for TypingManager + DecisionState
         ClientTickEvents.END_CLIENT_TICK.register {
@@ -440,6 +475,38 @@ class NPCMessageParserClient : ClientModInitializer {
                 com.canefe.storyclient.client.health.HealthPanel.toggle()
             }
 
+            // Mirror the Health panel onto the vanilla inventory screen (E): open
+            // it when the inventory opens, close it when the inventory closes.
+            // Only touch the copy we opened so a manual H toggle stays independent.
+            val inventoryOpen =
+                net.minecraft.client.MinecraftClient.getInstance().currentScreen is
+                    net.minecraft.client.gui.screen.ingame.InventoryScreen
+            if (inventoryOpen && !inventoryWasOpen) {
+                if (!com.canefe.storyclient.client.health.HealthPanel.isOpen()) {
+                    com.canefe.storyclient.client.health.HealthPanel.setOpen(true)
+                    healthOpenedByInventory = true
+                }
+                if (!com.canefe.storyclient.client.skills.SkillsPanel.isOpen()) {
+                    com.canefe.storyclient.client.skills.SkillsPanel.setOpen(true)
+                    skillsOpenedByInventory = true
+                }
+            } else if (!inventoryOpen && inventoryWasOpen) {
+                if (healthOpenedByInventory) {
+                    com.canefe.storyclient.client.health.HealthPanel.setOpen(false)
+                }
+                healthOpenedByInventory = false
+                if (skillsOpenedByInventory) {
+                    com.canefe.storyclient.client.skills.SkillsPanel.setOpen(false)
+                }
+                skillsOpenedByInventory = false
+            }
+            inventoryWasOpen = inventoryOpen
+
+            // DEBUG: replay the spawn cinematic on B press (for tuning the swoop).
+            while (spawnCinematicReplayKey.wasPressed()) {
+                com.canefe.storyclient.client.cinematic.SpawnCinematicController.start()
+            }
+
             // Directional combat: mouse-drag input capture + feint key edge.
             com.canefe.storyclient.client.combat.DirectionInputCapture.tick()
             while (liveAimKey.wasPressed()) {
@@ -472,10 +539,20 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.combat.OutcomeBannerHud.render(ctx)
             com.canefe.storyclient.client.hediff.HediffHud.render(ctx)
             com.canefe.storyclient.client.pause.PauseOverlayHud.render(ctx)
+            // Spawn-cinematic snap glow, then the join/world-change reveal fade —
+            // drawn last so they cover all HUD elements.
+            com.canefe.storyclient.client.cinematic.SpawnCinematicGlowOverlay.render(ctx)
+            com.canefe.storyclient.client.screen.ScreenFadeOverlay.render(ctx)
         }
         // NOTE: DM Control Panel (ImGui) is NOT rendered from HudRenderCallback —
         // see MinecraftClientImGuiMixin, which mirrors Axiom's `runTick` injection
         // after RenderTarget.blitToScreen so ImGui draws onto a clean GL state.
+
+        // Load/unload + drive the GTA-style spawn-cinematic post-process filter
+        // once per frame, before world rendering applies the post effect.
+        WorldRenderEvents.START.register { _ ->
+            com.canefe.storyclient.client.cinematic.SpawnCinematicPostEffect.tick()
+        }
 
         // Register world render event for BubbleRenderer + squad badges + formation preview
         WorldRenderEvents.AFTER_ENTITIES.register { context ->
