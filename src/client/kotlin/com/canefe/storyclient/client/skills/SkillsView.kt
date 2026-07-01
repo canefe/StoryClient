@@ -15,10 +15,16 @@ object SkillsView {
         else c.split('_').joinToString(" ") { it.replaceFirstChar { ch -> ch.uppercase() } }
 
     private fun skillRow(e: SkillEntry) {
-        ImGui.text("${e.label}  ${e.value.toInt()}/${e.maxValue.toInt()}   Lvl ${e.level}")
-        // Parchment-tone XP fill; frame comes from the theme's FrameBg.
+        val xpPct = (e.xpFraction.coerceIn(0f, 1f) * 100).toInt()
+        // Name, competence, level, and XP% all on the label line so nothing
+        // overflows/clips the bar. The bar itself is a clean fill (no overlay),
+        // inset slightly from the right frame so it never touches the wood edge.
+        ImGui.text("${e.label}  ${e.value.toInt()}/${e.maxValue.toInt()}   Lvl ${e.level}   xp $xpPct%")
+        // -1 = fill the content width (already inset by the window padding, so it
+        // won't touch the wood frame). No overlay text — the % is on the label
+        // line above, which avoids the centered-overlay clipping at low fills.
         ImGui.pushStyleColor(ImGuiCol.PlotHistogram, 0.72f, 0.60f, 0.35f, 1f)
-        ImGui.progressBar(e.xpFraction.coerceIn(0f, 1f), -1f, 12f, "xp ${(e.xpFraction * 100).toInt()}%")
+        ImGui.progressBar(e.xpFraction.coerceIn(0f, 1f), -1f, 10f, "")
         ImGui.popStyleColor()
     }
 
