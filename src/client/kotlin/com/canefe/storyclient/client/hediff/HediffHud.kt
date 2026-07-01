@@ -23,16 +23,21 @@ object HediffHud {
     private const val ICON = 16     // on-screen icon size (px)
     private const val TEX_SIZE = 32 // source PNG dimensions under textures/hediff/
     private const val PAD = 3       // backdrop padding around the icon (px)
-    private const val DISC = ICON + PAD * 2 // full square backdrop size (px)
+
+    // DynamicMoodles-style tile: dark rounded panel, icon on the left + a vertical
+    // segmented severity gauge on the right.
+    private const val GAUGE_W = 5   // gauge column width (px)
+    private const val GAUGE_GAP = 2 // gap between icon and gauge (px)
+    private const val SEGMENTS = 4  // number of gauge segments
+    private const val TILE_W = ICON + PAD * 2 + GAUGE_GAP + GAUGE_W // full tile width
+    private const val TILE_H = ICON + PAD * 2                       // full tile height
     private const val GAP = 4
     private const val MARGIN_RIGHT = 6
 
-    // Medieval-brown wooden panel (matches the resource-pack button style):
-    // a wood-brown fill framed by a lighter top-left highlight and a darker
-    // bottom-right shadow for a raised, beveled look.
-    private const val PANEL_WOOD = 0xFF6B4A2B.toInt()     // medieval brown fill
-    private const val BEVEL_LIGHT = 0xFF9C7045.toInt()    // lighter brown highlight (top-left)
-    private const val BEVEL_SHADOW = 0xFF3D2914.toInt()   // darker brown shadow (bottom-right)
+    // Flat dark tile (PZ-style), not the old wood button.
+    private const val TILE_BG = 0xE0181410.toInt()       // near-black translucent
+    private const val TILE_BORDER = 0xFF3D2914.toInt()   // dark brown edge
+    private const val SEG_OFF = 0xFF2A2A2A.toInt()        // empty gauge segment
 
     private val FALLBACK_TEX = Identifier.of("storyclient", "textures/hediff/unknown.png")
 
@@ -72,8 +77,8 @@ object HediffHud {
         val now = System.nanoTime() / 1_000_000L
         val sw = ctx.scaledWindowWidth
         val sh = ctx.scaledWindowHeight
-        val x = sw - DISC - MARGIN_RIGHT
-        val totalH = snapshot.size * DISC + (snapshot.size - 1) * GAP
+        val x = sw - TILE_W - MARGIN_RIGHT
+        val totalH = snapshot.size * TILE_H + (snapshot.size - 1) * GAP
         var y = (sh - totalH) / 2
 
         val mouse = client.mouse
@@ -87,11 +92,11 @@ object HediffHud {
             // Intermittent attention shake: only while fully present (not mid-fade).
             val shake = if (anim.removedAtMs == 0L) shakeOffset(anim, now) else 0
             val dx = x + shake
-            drawIcon(ctx, client, anim.entry, dx, y, alpha)
+            drawTile(ctx, client, anim.entry, dx, y, alpha)
             // Only hit-test while a screen frees the cursor; the locked
             // first-person crosshair would otherwise false-trigger on edge icons.
-            if (screenOpen && mx in dx..(dx + DISC) && my in y..(y + DISC)) hovered = anim.entry
-            y += DISC + GAP
+            if (screenOpen && mx in dx..(dx + TILE_W) && my in y..(y + TILE_H)) hovered = anim.entry
+            y += TILE_H + GAP
         }
 
         val hov = hovered
@@ -134,23 +139,48 @@ object HediffHud {
      * scaled into the ICON box via the 1.21.1 scaling drawTexture overload.
      * [alpha] applies the fade-in/out opacity.
      */
-    private fun drawIcon(ctx: DrawContext, client: MinecraftClient, entry: HediffEntry, x: Int, y: Int, alpha: Float) {
+    private fun drawTile(ctx: DrawContext, client: MinecraftClient, entry: HediffEntry, x: Int, y: Int, alpha: Float) {
         val preferred = textureFor(entry)
         val tex = if (client.resourceManager.getResource(preferred).isPresent) preferred else FALLBACK_TEX
 
-        // Medieval-brown wooden panel with a beveled frame; a thin severity-tinted
-        // inner ring keeps stage readable at a glance. Alpha is folded into each
-        // layer so the whole panel fades with the icon.
-        drawButtonPanel(ctx, x, y, DISC, DISC, withAlpha(PANEL_WOOD, alpha), alpha)
-        drawInnerRing(ctx, x + 2, y + 2, DISC - 4, DISC - 4, withAlpha(tintFor(entry.stage), alpha))
+        val x2 = x + TILE_W
+        val y2 = y + TILE_H
 
-        // Icon centered on top, untinted so the source art keeps its own colors;
-        // setShaderColor carries the fade alpha through the texture draw.
+        // Flat dark tile (DynamicMoodles style) + a 1px dark border. Alpha folds
+        // in so the whole tile fades with the icon.
+        ctx.fill(x, y, x2, y2, withAlpha(TILE_BG, alpha))
+        drawBorder(ctx, x, y, x2, y2, withAlpha(TILE_BORDER, alpha))
+
+        // Icon on the left, untinted so the source art keeps its own colors.
         val ix = x + PAD
         val iy = y + PAD
         ctx.setShaderColor(1f, 1f, 1f, alpha)
         ctx.drawTexture(tex, ix, iy, ICON, ICON, 0f, 0f, TEX_SIZE, TEX_SIZE, TEX_SIZE, TEX_SIZE)
         ctx.setShaderColor(1f, 1f, 1f, 1f)
+
+        // Segmented vertical severity gauge on the right edge: fills bottom-up by
+        // severity, tinted by stage (mild→extreme). Empty segments stay dark.
+        drawGauge(ctx, x2 - GAUGE_W - 1, y + 1, y2 - 1, entry, alpha)
+    }
+
+    /** Bottom-up segmented gauge in the right column; filled count = severity. */
+    private fun drawGauge(ctx: DrawContext, gx: Int, top: Int, bottom: Int, entry: HediffEntry, alpha: Float) {
+        val filled = (entry.severity.coerceIn(0f, 1f) * SEGMENTS).let {
+            // At least 1 segment for any present moodlet/hediff so it always reads.
+            maxOf(1, kotlin.math.ceil(it.toDouble()).toInt()).coerceAtMost(SEGMENTS)
+        }
+        val onColor = withAlpha(tintFor(entry.stage), alpha)
+        val offColor = withAlpha(SEG_OFF, alpha)
+        val gx2 = gx + GAUGE_W
+        val totalH = bottom - top
+        val segH = totalH / SEGMENTS
+        for (i in 0 until SEGMENTS) {
+            // Segment 0 is the BOTTOM one; fill the lowest `filled` segments.
+            val segBottom = bottom - i * segH
+            val segTop = segBottom - segH + 1
+            val color = if (i < filled) onColor else offColor
+            ctx.fill(gx, segTop, gx2, segBottom, color)
+        }
     }
 
     /** Scales an ARGB color's alpha channel by [alpha] (0..1). */
@@ -159,30 +189,8 @@ object HediffHud {
         return (a shl 24) or (argb and 0x00FFFFFF)
     }
 
-    /**
-     * Draws a square wooden panel of [fill] with a medieval-button bevel: a
-     * lighter highlight along the top/left edge and a darker shadow along the
-     * bottom/right edge — a raised 3D look. [alpha] scales the bevel colors so it
-     * fades together with the fill.
-     */
-    private fun drawButtonPanel(ctx: DrawContext, x: Int, y: Int, w: Int, h: Int, fill: Int, alpha: Float) {
-        val x2 = x + w
-        val y2 = y + h
-        // Fill first.
-        ctx.fill(x, y, x2, y2, fill)
-        // Bevel along the outer edge: light top/left, shadow bottom/right.
-        val light = withAlpha(BEVEL_LIGHT, alpha)
-        val shadow = withAlpha(BEVEL_SHADOW, alpha)
-        ctx.fill(x, y, x2, y + 1, light)         // top highlight
-        ctx.fill(x, y, x + 1, y2, light)         // left highlight
-        ctx.fill(x, y2 - 1, x2, y2, shadow)      // bottom shadow
-        ctx.fill(x2 - 1, y, x2, y2, shadow)      // right shadow
-    }
-
-    /** Draws a 1px-thick rectangular ring (outline only) of [color]. */
-    private fun drawInnerRing(ctx: DrawContext, x: Int, y: Int, w: Int, h: Int, color: Int) {
-        val x2 = x + w
-        val y2 = y + h
+    /** 1px-thick rectangular border (outline only) of [color]. */
+    private fun drawBorder(ctx: DrawContext, x: Int, y: Int, x2: Int, y2: Int, color: Int) {
         ctx.fill(x, y, x2, y + 1, color)      // top
         ctx.fill(x, y2 - 1, x2, y2, color)    // bottom
         ctx.fill(x, y, x + 1, y2, color)      // left
