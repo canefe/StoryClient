@@ -6,18 +6,21 @@ import net.minecraft.text.Text
 import net.minecraft.util.Identifier
 
 /**
- * Right-edge vertical column of the local player's active hediff icons
- * (Project-Zomboid style). Each icon is a per-hediff PNG, severity-tinted;
- * hovering an icon (while a screen frees the cursor) draws a small tooltip with
- * the label + description.
+ * Right-edge vertical column of the local player's active MOODLET tiles
+ * (DynamicMoodles style): icon + a segmented severity gauge, green for positive
+ * moods, red/orange for negative. Hovering a tile (while a screen frees the
+ * cursor) draws a small tooltip with the label + description.
+ *
+ * MOODLETS ONLY — hediffs are NOT shown here; they live in the Health tab. To
+ * surface a hediff on this HUD, author a matching thought/moodlet for it (e.g. a
+ * "bleeding" thought whose Evaluate tracks blood loss). The shared
+ * [HediffHudState] still holds hediffs for the Health tab; render() filters to
+ * kind=="moodlet".
  *
  * Hooked from the client entry point via Fabric `HudRenderCallback`.
  *
- * Textures: assets/storyclient/textures/hediff/<id>.png, with unknown.png as a
- * fallback for ids that ship no art. Drawn via the 1.21.1 `drawTexture(Identifier,
- * x, y, u, v, w, h, texW, texH)` overload, tinted by `setShaderColor` so stage
- * still reads through color. The tooltip stays a hand-drawn `fill`+`drawText`
- * box (mirrors ActionWheelHud).
+ * Textures: assets/storyclient/textures/moodlet/<id>.png, with unknown.png as a
+ * fallback for ids that ship no art.
  */
 object HediffHud {
     private const val ICON = 16     // on-screen icon size (px)
@@ -70,7 +73,11 @@ object HediffHud {
     fun render(ctx: DrawContext) {
         val client = MinecraftClient.getInstance()
         if (client.player == null) return
-        val snapshot = HediffHudState.renderSnapshot()
+        // The right-edge HUD shows MOODLETS only. Hediffs live in the Health tab;
+        // to surface a hediff here, author a matching thought/moodlet for it
+        // (e.g. a "bleeding" thought). The shared HediffHudState still holds
+        // hediffs for the Health tab, so we filter them out at render.
+        val snapshot = HediffHudState.renderSnapshot().filter { it.entry.kind == "moodlet" }
         if (snapshot.isEmpty()) return
 
         // Hover only resolves when a screen is open (chat/inventory), because in
