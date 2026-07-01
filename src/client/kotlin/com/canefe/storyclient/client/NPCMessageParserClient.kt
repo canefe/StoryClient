@@ -273,6 +273,8 @@ class NPCMessageParserClient : ClientModInitializer {
 
         // Player hediff HUD (s2c)
         com.canefe.storyclient.client.hediff.HediffPacketReceiver.register()
+        // Player moodlet HUD (s2c) — shares the right-edge column with hediffs
+        com.canefe.storyclient.client.hediff.MoodletPacketReceiver.register()
 
         // Directional combat: register all C2S and S2C payloads.
         PayloadTypeRegistry.playC2S().register(

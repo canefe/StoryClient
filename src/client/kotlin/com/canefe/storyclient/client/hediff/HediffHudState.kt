@@ -117,4 +117,6 @@ data class HediffEntry(
     val description: String,
     val bodyPart: String,
     val tendedQuality: Float,
+    /** "hediff" (default) or "moodlet" — picks the icon folder + tooltip framing. */
+    val kind: String = "hediff",
 )

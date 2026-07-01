@@ -61,7 +61,7 @@ object HediffPacketReceiver {
 
     private fun handleInbound(data: ByteArray) {
         if (data.isEmpty()) {
-            HediffHudState.clear()
+            ConditionHudFeed.setHediffs(emptyList())
             return
         }
         val text = String(data, Charsets.UTF_8)
@@ -70,7 +70,7 @@ object HediffPacketReceiver {
             println("[HediffPacketReceiver] Failed to parse: ${text.take(200)}")
             return
         }
-        HediffHudState.replaceAll(
+        ConditionHudFeed.setHediffs(
             dto.hediffs.map {
                 HediffEntry(
                     id = it.id,

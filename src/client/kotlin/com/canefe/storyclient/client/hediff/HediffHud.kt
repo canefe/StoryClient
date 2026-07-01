@@ -36,8 +36,11 @@ object HediffHud {
 
     private val FALLBACK_TEX = Identifier.of("storyclient", "textures/hediff/unknown.png")
 
-    private fun textureFor(id: String): Identifier =
-        Identifier.of("storyclient", "textures/hediff/$id.png")
+    /** Icon folder by entry kind: hediffs vs moodlets ship art in separate dirs. */
+    private fun textureFor(entry: HediffEntry): Identifier {
+        val dir = if (entry.kind == "moodlet") "moodlet" else "hediff"
+        return Identifier.of("storyclient", "textures/$dir/${entry.id}.png")
+    }
 
     // Tooltip box styling (mirrors ActionWheelHud's hand-drawn label box).
     private const val TIP_PAD = 4
@@ -132,7 +135,7 @@ object HediffHud {
      * [alpha] applies the fade-in/out opacity.
      */
     private fun drawIcon(ctx: DrawContext, client: MinecraftClient, entry: HediffEntry, x: Int, y: Int, alpha: Float) {
-        val preferred = textureFor(entry.id)
+        val preferred = textureFor(entry)
         val tex = if (client.resourceManager.getResource(preferred).isPresent) preferred else FALLBACK_TEX
 
         // Medieval-brown wooden panel with a beveled frame; a thin severity-tinted
