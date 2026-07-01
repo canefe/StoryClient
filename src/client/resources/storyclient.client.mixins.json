@@ -10,12 +10,18 @@
     "EntityRendererLabelMixin",
     "CameraAccessor",
     "CameraShakeMixin",
+    "SpawnCinematicCameraMixin",
+    "GameRendererAccessor",
     "MouseMixin",
     "MouseButtonMixin",
     "RightClickPuppetMixin",
     "PlayerFreezeMixin",
     "KeyboardMixin",
     "MinecraftClientImGuiMixin",
+    "MinecraftClientTerrainScreenMixin",
+    "DownloadingTerrainScreenAccessor",
+    "ConnectScreenMixin",
+    "InventoryScreenBackgroundMixin",
     "TextSerializationAccessor"
   ],
   "injectors": {
