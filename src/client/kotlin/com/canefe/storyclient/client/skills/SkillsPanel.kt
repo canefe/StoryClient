@@ -1,36 +1,33 @@
 package com.canefe.storyclient.client.skills
 
 import com.canefe.storyclient.client.dm.DMPanelManager
+import com.canefe.storyclient.client.health.HealthPanel
 import com.canefe.storyclient.client.health.HealthTheme
 import imgui.ImGui
 import imgui.flag.ImGuiCond
 import imgui.type.ImBoolean
 
 /**
- * Standalone Skills window for the LOCAL player. Peer to HealthPanel — rendered
+ * Standalone Skills window for the LOCAL player. Peer to [HealthPanel] — rendered
  * inside the shared ImGui frame owned by [DMPanelManager], opens independently,
- * and reuses the wood [HealthTheme]. Docks to the RIGHT edge (Health docks left)
- * so both frame the E inventory when opened together.
+ * and reuses the wood [HealthTheme]. Stacks directly BELOW Health in the top-left
+ * column by default.
  *
- * Like HealthPanel, the layout RESETS every open (see [justOpened]) so the panel
- * always comes up in the same place.
+ * Layout is NOT reset on re-open: a default position/size is suggested only the
+ * first time (ImGuiCond.FirstUseEver); after that ImGui remembers whatever the
+ * player dragged/resized.
  */
 object SkillsPanel {
     private val open = ImBoolean(false)
 
-    /** Set on the closed→open edge so [render] re-applies the default layout once. */
-    private var justOpened = false
-
     private const val DEFAULT_W = 420f
-    private const val DEFAULT_H = 560f
-    private const val MARGIN = 24f
+    private const val DEFAULT_H = 400f
 
     fun isOpen(): Boolean = open.get()
 
     fun toggle() = setOpen(!open.get())
 
     fun setOpen(value: Boolean) {
-        if (value && !open.get()) justOpened = true
         open.set(value)
     }
 
@@ -39,15 +36,13 @@ object SkillsPanel {
         val font = DMPanelManager.interFont
         if (font != null) ImGui.pushFont(font)
 
-        if (justOpened) {
-            val vp = ImGui.getMainViewport()
-            // Right edge: viewport right minus panel width minus margin.
-            val cx = vp.posX + vp.sizeX - DEFAULT_W - MARGIN
-            val cy = vp.posY + (vp.sizeY - DEFAULT_H) * 0.5f
-            ImGui.setNextWindowPos(cx, cy, ImGuiCond.Always)
-            ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, ImGuiCond.Always)
-            justOpened = false
-        }
+        // First-time default only: directly below the Health window (same left
+        // column). FirstUseEver so the player's later drags/resizes stick.
+        val vp = ImGui.getMainViewport()
+        val x = vp.posX + HealthPanel.MARGIN
+        val y = vp.posY + HealthPanel.MARGIN + HealthPanel.DEFAULT_H + 8f
+        ImGui.setNextWindowPos(x, y, ImGuiCond.FirstUseEver)
+        ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, ImGuiCond.FirstUseEver)
 
         HealthTheme.push()
         if (ImGui.begin("Skills###StorySkills", open)) {
