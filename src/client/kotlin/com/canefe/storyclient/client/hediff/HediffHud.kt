@@ -94,8 +94,10 @@ object HediffHud {
         var hovered: HediffEntry? = null
         for (anim in snapshot) {
             val alpha = alphaFor(anim, now)
-            // Intermittent attention shake: only while fully present (not mid-fade).
-            val shake = if (anim.removedAtMs == 0L) shakeOffset(anim, now) else 0
+            // Intermittent attention shake: only while fully present (not mid-fade),
+            // and never for positive moodlets — a good state shouldn't demand
+            // attention like an injury/negative state does.
+            val shake = if (anim.removedAtMs == 0L && !anim.entry.positive) shakeOffset(anim, now) else 0
             val dx = x + shake
             drawTile(ctx, client, anim.entry, dx, y, alpha)
             // Only hit-test while a screen frees the cursor; the locked
