@@ -26,7 +26,7 @@ object HediffHud {
 
     // DynamicMoodles-style tile: dark rounded panel, icon on the left + a vertical
     // segmented severity gauge on the right.
-    private const val GAUGE_W = 5   // gauge column width (px)
+    private const val GAUGE_W = 3   // gauge column width (px)
     private const val GAUGE_GAP = 2 // gap between icon and gauge (px)
     private const val SEGMENTS = 4  // number of gauge segments
     private const val TILE_W = ICON + PAD * 2 + GAUGE_GAP + GAUGE_W // full tile width
