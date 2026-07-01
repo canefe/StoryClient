@@ -20,6 +20,9 @@ import imgui.type.ImBoolean
 object SkillsPanel {
     private val open = ImBoolean(false)
 
+    /** Set by the right-click "Reset Layout" menu; forces the default next frame. */
+    private var resetRequested = false
+
     private const val DEFAULT_W = 420f
     private const val DEFAULT_H = 400f
 
@@ -36,17 +39,24 @@ object SkillsPanel {
         val font = DMPanelManager.interFont
         if (font != null) ImGui.pushFont(font)
 
-        // First-time default only: directly below the Health window (same left
-        // column). FirstUseEver so the player's later drags/resizes stick.
+        // Default: directly below the Health window (same left column). FirstUseEver
+        // so drags stick; forced (Always) on an explicit "Reset Layout".
         val vp = ImGui.getMainViewport()
         val x = vp.posX + HealthPanel.MARGIN
         val y = vp.posY + HealthPanel.MARGIN + HealthPanel.DEFAULT_H + 8f
-        ImGui.setNextWindowPos(x, y, ImGuiCond.FirstUseEver)
-        ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, ImGuiCond.FirstUseEver)
+        val cond = if (resetRequested) ImGuiCond.Always else ImGuiCond.FirstUseEver
+        ImGui.setNextWindowPos(x, y, cond)
+        ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, cond)
+        resetRequested = false
 
         HealthTheme.push()
         if (ImGui.begin("Skills###StorySkills", open)) {
             HealthTheme.drawFrame()
+            // Right-click anywhere in the window → context menu with Reset Layout.
+            if (ImGui.beginPopupContextWindow()) {
+                if (ImGui.menuItem("Reset Layout")) resetRequested = true
+                ImGui.endPopup()
+            }
             // Guard the content render so a draw error can't skip ImGui.end()
             // (which would imbalance the frame). Log the cause so it's diagnosable
             // instead of silently swallowed by DMPanelManager's runCatching.

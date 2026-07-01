@@ -20,6 +20,9 @@ import imgui.type.ImBoolean
 object HealthPanel {
     private val open = ImBoolean(false)
 
+    /** Set by the right-click "Reset Layout" menu; forces the default next frame. */
+    private var resetRequested = false
+
     /** Default window size (px), suggested on first use only. */
     const val DEFAULT_W = 420f
     const val DEFAULT_H = 360f
@@ -40,16 +43,23 @@ object HealthPanel {
         val font = DMPanelManager.interFont
         if (font != null) ImGui.pushFont(font)
 
-        // First-time default only: top-left. FirstUseEver means ImGui applies
-        // this once, then honors any position/size the player drags thereafter.
+        // Default position/size: FirstUseEver so ImGui applies it once then honors
+        // the player's drags. On an explicit "Reset Layout" we force it (Always).
         val vp = ImGui.getMainViewport()
-        ImGui.setNextWindowPos(vp.posX + MARGIN, vp.posY + MARGIN, ImGuiCond.FirstUseEver)
-        ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, ImGuiCond.FirstUseEver)
+        val cond = if (resetRequested) ImGuiCond.Always else ImGuiCond.FirstUseEver
+        ImGui.setNextWindowPos(vp.posX + MARGIN, vp.posY + MARGIN, cond)
+        ImGui.setNextWindowSize(DEFAULT_W, DEFAULT_H, cond)
+        resetRequested = false
 
         // Scoped medieval/Minecraft-inventory theme — Health window only.
         HealthTheme.push()
         if (ImGui.begin("Health###StoryHealth", open)) {
             HealthTheme.drawFrame()
+            // Right-click anywhere in the window → context menu with Reset Layout.
+            if (ImGui.beginPopupContextWindow()) {
+                if (ImGui.menuItem("Reset Layout")) resetRequested = true
+                ImGui.endPopup()
+            }
             HealthView.render(HealthState.snapshot())
         }
         ImGui.end()
