@@ -15,6 +15,7 @@ import imgui.flag.ImGuiCol
  */
 object SkillsView {
     private const val MAX_LEVEL = 20
+    private const val ICON = 20f
 
     private fun prettyCategory(c: String): String =
         if (c.isBlank()) "Other"
@@ -43,6 +44,16 @@ object SkillsView {
         val frac = (e.value / e.maxValue.coerceAtLeast(1f)).coerceIn(0f, 1f)
         val col = levelColor(frac)
         val xpPct = (e.xpFraction.coerceIn(0f, 1f) * 100).toInt()
+
+        // Icon left of the name, via the SAME proven ImGui.image path the Health
+        // tab's paper-doll uses. Rendered at full color (it's a real item sprite,
+        // not a placeholder). If the texture isn't loaded (tid <= 0) we omit the
+        // image and let the text start at the margin.
+        val tid = SkillIcons.glId(e.id)
+        if (tid > 0L) {
+            ImGui.image(tid, ICON, ICON, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f)
+            ImGui.sameLine()
+        }
 
         ImGui.pushStyleColor(ImGuiCol.Text, col[0], col[1], col[2], col[3])
         ImGui.text("${e.label}   ${e.value.toInt()}/${e.maxValue.toInt()}   Lvl ${e.level}   xp $xpPct%")
