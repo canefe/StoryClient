@@ -90,6 +90,7 @@ object MoodletPacketReceiver {
                     bodyPart = "",
                     tendedQuality = 0f,
                     kind = "moodlet",
+                    positive = it.moodOffset >= 0f,
                 )
             },
         )

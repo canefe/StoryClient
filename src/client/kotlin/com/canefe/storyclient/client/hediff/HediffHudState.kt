@@ -119,4 +119,6 @@ data class HediffEntry(
     val tendedQuality: Float,
     /** "hediff" (default) or "moodlet" — picks the icon folder + tooltip framing. */
     val kind: String = "hediff",
+    /** True for good moodlets (positive mood) — colors the gauge green vs red. */
+    val positive: Boolean = false,
 )

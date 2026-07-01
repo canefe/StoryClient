@@ -55,11 +55,16 @@ object HediffHud {
     private const val TIP_LABEL_COLOR = 0xFFFFFFFF.toInt()
     private const val TIP_DESC_COLOR = 0xFFBBBBBB.toInt()
 
-    // Severity color, used to fill the circular backdrop behind each icon.
-    private fun tintFor(stage: String): Int = when (stage) {
-        "Extreme" -> 0xFFFF4040.toInt()
-        "Serious" -> 0xFFFF9933.toInt()
-        else -> 0xFFFFDD33.toInt()
+    // Gauge segment color by intensity tier. Negative (bad) ramps yellow→red;
+    // positive (good) moodlets ramp light→bright green. Higher stage = more
+    // intense, whichever direction.
+    private fun tintFor(stage: String, positive: Boolean): Int = when {
+        positive && stage == "Extreme" -> 0xFF33DD33.toInt()  // bright green
+        positive && stage == "Serious" -> 0xFF66CC44.toInt()
+        positive -> 0xFF99CC55.toInt()                        // light green
+        stage == "Extreme" -> 0xFFFF4040.toInt()              // red
+        stage == "Serious" -> 0xFFFF9933.toInt()              // orange
+        else -> 0xFFFFDD33.toInt()                            // yellow
     }
 
     fun render(ctx: DrawContext) {
@@ -169,7 +174,7 @@ object HediffHud {
             // At least 1 segment for any present moodlet/hediff so it always reads.
             maxOf(1, kotlin.math.ceil(it.toDouble()).toInt()).coerceAtMost(SEGMENTS)
         }
-        val onColor = withAlpha(tintFor(entry.stage), alpha)
+        val onColor = withAlpha(tintFor(entry.stage, entry.positive), alpha)
         val offColor = withAlpha(SEG_OFF, alpha)
         val gx2 = gx + GAUGE_W
         val totalH = bottom - top
