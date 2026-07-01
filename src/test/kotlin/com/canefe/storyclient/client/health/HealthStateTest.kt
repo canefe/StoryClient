@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 
 class HealthStateTest {
     private fun h(id: String, part: String, sev: Float = 0.5f) =
-        HediffEntry(id, sev, id, "Minor", "", part)
+        HediffEntry(id, sev, id, "Minor", "", part, 0f)
 
     @Test
     fun splits_whole_body_from_localized() {
