@@ -15,6 +15,12 @@ object HealthState {
         entries.filter { it.bodyPart == part }
             .maxOfOrNull { HediffHudState.severityFraction(it) } ?: 0f
 
-    /** Convenience snapshot from live HUD state. */
-    fun snapshot(): List<HediffEntry> = HediffHudState.active
+    /**
+     * Snapshot of the live condition state, filtered to real hediffs only.
+     * [HediffHudState.active] is the UNIFIED right-edge HUD feed (hediffs +
+     * moodlets), but the Health window's Conditions/Injuries are physical hediffs
+     * only — moodlets (Quenched, Well Rested, …) belong on the moodlet HUD, not
+     * here. Filter by kind so mood states don't leak into Conditions.
+     */
+    fun snapshot(): List<HediffEntry> = HediffHudState.active.filter { it.kind == "hediff" }
 }
