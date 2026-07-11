@@ -2,6 +2,7 @@ package com.canefe.storyclient.client.interaction
 
 import com.canefe.storyclient.client.camera.OocCameraController
 import com.canefe.storyclient.client.cinematic.SpawnCinematicController
+import com.canefe.storyclient.client.confrontation.ConfrontationState
 import com.canefe.storyclient.client.pause.PauseState
 
 /**
@@ -22,5 +23,6 @@ object InteractionLock {
         get() =
             SpawnCinematicController.isActive ||
                 OocCameraController.isActive ||
+                ConfrontationState.active ||
                 PauseState.paused
 }

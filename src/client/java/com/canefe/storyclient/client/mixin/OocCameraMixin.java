@@ -1,6 +1,7 @@
 package com.canefe.storyclient.client.mixin;
 
 import com.canefe.storyclient.client.camera.OocCameraController;
+import com.canefe.storyclient.client.confrontation.ConfrontationCameraController;
 import net.minecraft.client.render.Camera;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.Vec3d;
@@ -46,6 +47,36 @@ public abstract class OocCameraMixin {
         CameraAccessor self = (CameraAccessor) this;
         // Detach in the air while the body stays grounded — third-person renders
         // the player model and hides the first-person hand.
+        self.storyclient$setThirdPerson(true);
+        self.storyclient$setRotation(yaw, pitch);
+        self.storyclient$setPos(pos);
+    }
+
+    /**
+     * Two-shot confrontation camera: frame both participants from a point back
+     * off their midpoint. Close-up shots use {@code setCameraEntity} instead and
+     * need no transform override, so this only fires in two-shot mode.
+     */
+    @Inject(
+        method = "update(Lnet/minecraft/world/BlockView;Lnet/minecraft/entity/Entity;ZZF)V",
+        at = @At("TAIL")
+    )
+    private void storyclient$applyConfrontationCamera(
+        BlockView area,
+        Entity focusedEntity,
+        boolean thirdPerson,
+        boolean inverseView,
+        float tickDelta,
+        CallbackInfo ci
+    ) {
+        if (!ConfrontationCameraController.INSTANCE.isTwoShot()) return;
+
+        Vec3d pos = ConfrontationCameraController.INSTANCE.cameraPos(tickDelta);
+        Float yaw = ConfrontationCameraController.INSTANCE.cameraYaw();
+        Float pitch = ConfrontationCameraController.INSTANCE.cameraPitch();
+        if (pos == null || yaw == null || pitch == null) return;
+
+        CameraAccessor self = (CameraAccessor) this;
         self.storyclient$setThirdPerson(true);
         self.storyclient$setRotation(yaw, pitch);
         self.storyclient$setPos(pos);

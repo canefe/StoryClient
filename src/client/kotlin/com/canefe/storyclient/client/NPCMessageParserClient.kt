@@ -285,6 +285,7 @@ class NPCMessageParserClient : ClientModInitializer {
 
         // Decision system payloads (s2c prompt/observe, c2s response)
         com.canefe.storyclient.client.decision.DecisionPacketReceiver.register()
+        com.canefe.storyclient.client.confrontation.ConfrontationPacketReceiver.register()
 
         // Permission gate toast (s2c prompt, c2s accept/deny)
         com.canefe.storyclient.client.permission.PermissionPacketReceiver.register()
@@ -446,11 +447,27 @@ class NPCMessageParserClient : ClientModInitializer {
         )
         val decisionKeyDown = java.util.HashMap<Int, Boolean>()
 
+        // Edge-tracked keys for the confrontation overlay (1-9 pick, T free-text).
+        val confrontationKeys = intArrayOf(
+            org.lwjgl.glfw.GLFW.GLFW_KEY_1,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_2,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_3,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_4,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_5,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_6,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_7,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_8,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_9,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_T,
+        )
+        val confrontationKeyDown = java.util.HashMap<Int, Boolean>()
+
         // Register tick event for TypingManager + DecisionState
         ClientTickEvents.END_CLIENT_TICK.register {
             TypingManager.tick()
             com.canefe.storyclient.client.decision.DecisionState.tick()
             com.canefe.storyclient.client.decision.CinematicCameraController.tick()
+            com.canefe.storyclient.client.confrontation.ConfrontationCameraController.tick()
             com.canefe.storyclient.client.permission.PermissionKeybinds.tickKeybinds()
             com.canefe.storyclient.client.camera.OocCameraController.tick()
 
@@ -467,6 +484,34 @@ class NPCMessageParserClient : ClientModInitializer {
                 }
             } else {
                 if (decisionKeyDown.isNotEmpty()) decisionKeyDown.clear()
+            }
+
+            // Confrontation overlay key polling — only on our turn, only when no
+            // Screen is open (the free-text screen handles its own input).
+            val confState = com.canefe.storyclient.client.confrontation.ConfrontationState
+            val mcClient = net.minecraft.client.MinecraftClient.getInstance()
+            if (confState.active && confState.myTurn && mcClient.currentScreen == null) {
+                val handle = mcClient.window.handle
+                for (key in confrontationKeys) {
+                    val down = org.lwjgl.glfw.GLFW.glfwGetKey(handle, key) == org.lwjgl.glfw.GLFW.GLFW_PRESS
+                    val wasDown = confrontationKeyDown[key] == true
+                    if (down && !wasDown) {
+                        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_T) {
+                            if (confState.allowFreeText) {
+                                com.canefe.storyclient.client.confrontation.ConfrontationOverlay.openFreeform()
+                                mcClient.setScreen(
+                                    com.canefe.storyclient.client.confrontation.ConfrontationFreeformScreen(),
+                                )
+                            }
+                        } else {
+                            val idx = key - org.lwjgl.glfw.GLFW.GLFW_KEY_1
+                            com.canefe.storyclient.client.confrontation.ConfrontationOverlay.pick(idx)
+                        }
+                    }
+                    confrontationKeyDown[key] = down
+                }
+            } else {
+                if (confrontationKeyDown.isNotEmpty()) confrontationKeyDown.clear()
             }
 
             // Wheel: open on press, close+commit on release.
@@ -536,6 +581,7 @@ class NPCMessageParserClient : ClientModInitializer {
             com.canefe.storyclient.client.squad.SquadListHud.render(ctx)
             com.canefe.storyclient.client.wheel.ActionWheelHud.render(ctx)
             DecisionHud.render(ctx)
+            com.canefe.storyclient.client.confrontation.ConfrontationOverlay.render(ctx)
             com.canefe.storyclient.client.permission.PermissionToastHud.render(ctx)
             com.canefe.storyclient.client.combat.StaminaBarHud.render(ctx)
             com.canefe.storyclient.client.combat.DirectionCommitHud.render(ctx)
@@ -557,6 +603,7 @@ class NPCMessageParserClient : ClientModInitializer {
         WorldRenderEvents.START.register { _ ->
             com.canefe.storyclient.client.cinematic.SpawnCinematicPostEffect.tick()
             com.canefe.storyclient.client.camera.OocPostEffect.tick()
+            com.canefe.storyclient.client.confrontation.ConfrontationPostEffect.tick()
         }
 
         // Register world render event for BubbleRenderer + squad badges + formation preview

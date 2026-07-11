@@ -2,6 +2,7 @@ package com.canefe.storyclient.client.mixin;
 
 import com.canefe.storyclient.client.camera.OocCameraController;
 import com.canefe.storyclient.client.cinematic.SpawnCinematicController;
+import com.canefe.storyclient.client.confrontation.ConfrontationState;
 import com.canefe.storyclient.client.pause.PauseState;
 import net.minecraft.client.input.Input;
 import net.minecraft.client.input.KeyboardInput;
@@ -26,7 +27,8 @@ public abstract class PlayerFreezeMixin {
     private void storyclient$freezeWhilePaused(boolean slowDown, float slowDownFactor, CallbackInfo ci) {
         if (!PauseState.INSTANCE.getPaused()
             && !SpawnCinematicController.INSTANCE.isActive()
-            && !OocCameraController.INSTANCE.isActive()) return;
+            && !OocCameraController.INSTANCE.isActive()
+            && !ConfrontationState.INSTANCE.getActive()) return;
         Input self = (Input) (Object) this;
         self.movementForward = 0.0f;
         self.movementSideways = 0.0f;
