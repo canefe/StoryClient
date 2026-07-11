@@ -103,9 +103,20 @@ object ConfrontationOverlay {
 
     /** Pick option [index] (0-based) if it's our turn and it exists. */
     fun pick(index: Int) {
-        if (!ConfrontationState.myTurn) return
-        val choice = ConfrontationState.choices.getOrNull(index) ?: return
-        val id = ConfrontationState.confrontationId ?: return
+        println("[Confrontation] pick($index) myTurn=${ConfrontationState.myTurn} choices=${ConfrontationState.choices.size} conf=${ConfrontationState.confrontationId}")
+        if (!ConfrontationState.myTurn) {
+            println("[Confrontation] pick ignored: not my turn")
+            return
+        }
+        val choice = ConfrontationState.choices.getOrNull(index) ?: run {
+            println("[Confrontation] pick ignored: no choice at index $index")
+            return
+        }
+        val id = ConfrontationState.confrontationId ?: run {
+            println("[Confrontation] pick ignored: no confrontationId")
+            return
+        }
+        println("[Confrontation] sending pick choiceId=${choice.id} conf=$id")
         ConfrontationPacketReceiver.sendPick(id, choice.id)
         ConfrontationState.clearMyTurn()
     }

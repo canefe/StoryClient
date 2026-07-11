@@ -72,17 +72,20 @@ object ConfrontationPacketReceiver {
         if (data.isEmpty()) return
         val subtype = data[0]
         val json = String(data, 1, data.size - 1, Charsets.UTF_8)
+        println("[Confrontation] S2C subtype=$subtype json=${json.take(200)}")
         runCatching {
             when (subtype) {
                 0x00.toByte() -> {
                     val e = ConfrontationState.json.decodeFromString(EnterS2C.serializer(), json)
                     ConfrontationState.enter(e.id)
                     ConfrontationCameraController.start()
+                    println("[Confrontation] ENTER id=${e.id} roster=${e.roster}")
                 }
                 0x01.toByte() -> {
                     val c = ConfrontationState.json.decodeFromString(ChoicesS2C.serializer(), json)
                     // Only my turn's choices reach me (server targets them), so accept.
                     ConfrontationState.setChoices(c)
+                    println("[Confrontation] CHOICES target=${c.target_character_id} n=${c.choices.size} -> myTurn=${ConfrontationState.myTurn}")
                 }
                 0x02.toByte() -> {
                     val t = ConfrontationState.json.decodeFromString(TurnS2C.serializer(), json)
@@ -90,8 +93,10 @@ object ConfrontationPacketReceiver {
                     // active_character_id is a CHARACTER id — compare against the
                     // server-pushed self character id, NOT the MC player UUID.
                     val me = localCharacterId()
+                    println("[Confrontation] TURN active=${t.active_character_id} me=$me (selfId='${com.canefe.storyclient.client.character.SelfCharacterState.characterId}')")
                     if (me != null && t.active_character_id != me) {
                         ConfrontationState.clearMyTurn()
+                        println("[Confrontation] TURN cleared myTurn (not me)")
                     }
                 }
                 0x03.toByte() -> {
@@ -121,10 +126,13 @@ object ConfrontationPacketReceiver {
 
     private fun send(dto: ResponseDto) {
         val json = ConfrontationState.json.encodeToString(dto)
+        val canSend = ClientPlayNetworking.canSend(C2SPayload.ID)
+        println("[Confrontation] C2S send json=$json canSend=$canSend channel=${C2SPayload.ID.id}")
         runCatching {
             ClientPlayNetworking.send(C2SPayload(json.toByteArray(Charsets.UTF_8)))
+            println("[Confrontation] C2S send OK")
         }.onFailure {
-            println("[ConfrontationPacketReceiver] send failed: ${it.message}")
+            println("[Confrontation] C2S send FAILED: ${it.javaClass.simpleName}: ${it.message}")
         }
     }
 }
