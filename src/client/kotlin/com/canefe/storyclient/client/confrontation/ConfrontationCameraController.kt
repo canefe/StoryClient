@@ -44,6 +44,9 @@ object ConfrontationCameraController {
     /** 0 = close-up on A, 1 = two-shot, 2 = close-up on B. Cycles. */
     private var shot = 0
 
+    /** Saved hudHidden to restore on exit (mirrors OOC / spawn cinematic). */
+    private var savedHudHidden = false
+
     val isActive: Boolean
         get() = active
 
@@ -52,10 +55,17 @@ object ConfrontationCameraController {
         startMs = System.currentTimeMillis()
         lastCutMs = startMs
         shot = 0
+        // Hide the vanilla HUD (hearts, hotbar, hunger, crosshair, hands) for a
+        // clean cinematic shot. HudRenderCallback still fires while hidden, so the
+        // confrontation overlay keeps drawing. Restored in stop().
+        val options = MinecraftClient.getInstance().options
+        savedHudHidden = options.hudHidden
+        options.hudHidden = true
     }
 
     fun stop() {
         active = false
+        MinecraftClient.getInstance().options.hudHidden = savedHudHidden
     }
 
     /** Advance the shot cycle on the hold timer. */
