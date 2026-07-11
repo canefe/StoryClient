@@ -151,7 +151,7 @@ object ConfrontationOverlay {
             return
         }
         println("[Confrontation] sending pick choiceId=${choice.id} conf=$id")
-        ConfrontationPacketReceiver.sendPick(id, choice.id)
+        ConfrontationPacketReceiver.sendPick(id, choice.id, choice.label)
         ConfrontationState.clearMyTurn()
     }
 }

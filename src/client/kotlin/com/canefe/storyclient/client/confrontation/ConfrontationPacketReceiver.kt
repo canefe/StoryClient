@@ -57,6 +57,9 @@ object ConfrontationPacketReceiver {
         val confrontationId: String,
         val choiceId: String? = null,
         val text: String? = null,
+        // The chosen option's label — StoryMC ghostwrites + speaks it as the
+        // player's in-character line (like /g). Empty for free-text picks.
+        val label: String = "",
     )
 
     fun register() {
@@ -116,8 +119,8 @@ object ConfrontationPacketReceiver {
     private fun localCharacterId(): String? =
         com.canefe.storyclient.client.character.SelfCharacterState.characterId.ifBlank { null }
 
-    fun sendPick(confrontationId: String, choiceId: String) {
-        send(ResponseDto(confrontationId = confrontationId, choiceId = choiceId))
+    fun sendPick(confrontationId: String, choiceId: String, label: String) {
+        send(ResponseDto(confrontationId = confrontationId, choiceId = choiceId, label = label))
     }
 
     fun sendFreeText(confrontationId: String, text: String) {
