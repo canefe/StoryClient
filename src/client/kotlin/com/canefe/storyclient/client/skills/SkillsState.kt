@@ -1,7 +1,5 @@
 package com.canefe.storyclient.client.skills
 
-import kotlin.math.floor
-
 /**
  * Holds the local player's active skills for the Skills window. Replaced
  * wholesale on each "story:skills" packet (full-state semantics — the server
@@ -32,6 +30,6 @@ data class SkillEntry(
     val maxValue: Float,
     val xpFraction: Float,
 ) {
-    /** Display milestone band: 0..20 over the 0..100 competence value. */
-    val level: Int get() = floor(value / 5f).toInt()
+    /** The competence value is the level; xpFraction fills toward the next one. */
+    val level: Int get() = value.toInt()
 }

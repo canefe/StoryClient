@@ -1,0 +1,5 @@
+.venv/
+cache/
+.ipynb_checkpoints/
+__pycache__/
+uv.lock

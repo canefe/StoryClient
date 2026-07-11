@@ -14,7 +14,6 @@ import imgui.flag.ImGuiCol
  * pushStyleColor, progressBar, separator) so it can't throw at draw time.
  */
 object SkillsView {
-    private const val MAX_LEVEL = 20
     private const val ICON = 20f
 
     private fun prettyCategory(c: String): String =
@@ -30,14 +29,6 @@ object SkillsView {
             f < 0.85f -> floatArrayOf(0.84f, 0.70f, 0.40f, 1f) // gold
             else -> floatArrayOf(0.99f, 0.88f, 0.55f, 1f)      // bright
         }
-    }
-
-    /** A textual pip track: filled up to [level], empty after. ASCII only, since
-     *  the loaded Inter font doesn't cover Unicode block glyphs (they'd render as
-     *  '?'). Bracketed for a segmented-gauge look. */
-    private fun pipTrack(level: Int): String {
-        val on = level.coerceIn(0, MAX_LEVEL)
-        return "[" + "|".repeat(on) + ".".repeat(MAX_LEVEL - on) + "]"
     }
 
     private fun skillRow(e: SkillEntry) {
@@ -56,12 +47,7 @@ object SkillsView {
         }
 
         ImGui.pushStyleColor(ImGuiCol.Text, col[0], col[1], col[2], col[3])
-        ImGui.text("${e.label}   ${e.value.toInt()}/${e.maxValue.toInt()}   Lvl ${e.level}   xp $xpPct%")
-        ImGui.popStyleColor()
-
-        // Pip track in the dimmer tier color.
-        ImGui.pushStyleColor(ImGuiCol.Text, col[0] * 0.85f, col[1] * 0.85f, col[2] * 0.85f, 1f)
-        ImGui.text(pipTrack(e.level))
+        ImGui.text("${e.label}   Lvl ${e.level}   xp $xpPct%")
         ImGui.popStyleColor()
 
         // XP bar tinted to the tier color, clean fill (no overlay).

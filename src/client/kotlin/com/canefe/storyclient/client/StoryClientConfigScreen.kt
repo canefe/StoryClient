@@ -77,6 +77,20 @@ object StoryClientConfigScreen {
         )
 
         general.addEntry(
+            entryBuilder.startDoubleField(Text.literal("Bubble Y Offset (Blocks)"), StoryClientConfig.bubbleYOffset)
+                .setDefaultValue(0.0)
+                .setMin(-3.0)
+                .setMax(3.0)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.bubbleYOffset = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Extra height (in blocks) for dialogue bubbles above NPCs. Only applies when Use Bubble Renderer is on."))
+                .build()
+        )
+
+        general.addEntry(
             entryBuilder.startBooleanToggle(Text.literal("FOV Overlay: 3D Cone"), StoryClientConfig.fovCone3D)
                 .setDefaultValue(false)
                 .setSaveConsumer { newValue ->
@@ -87,6 +101,51 @@ object StoryClientConfigScreen {
                 .setTooltip(Text.literal("Render the /story debug fov perception overlay as a solid 3D cone (follows head pitch) instead of a flat 2D ground wedge"))
                 .build()
         )
+
+        general.addEntry(
+            entryBuilder.startBooleanToggle(Text.literal("Bubble Text Outline"), StoryClientConfig.bubbleTextOutline)
+                .setDefaultValue(false)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.bubbleTextOutline = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Draw a black outline around NPC bubble dialogue and action text"))
+                .build()
+        )
+
+        general.addEntry(
+            entryBuilder.startBooleanToggle(Text.literal("Bubble Text Shadow"), StoryClientConfig.bubbleTextShadow)
+                .setDefaultValue(false)
+                .setSaveConsumer { newValue ->
+                    StoryClientConfig.bubbleTextShadow = newValue
+                    StoryClientConfig.save()
+                    StoryClientConfig.load()
+                }
+                .setTooltip(Text.literal("Draw a drop-shadow under NPC bubble dialogue and action text"))
+                .build()
+        )
+
+        // Clickable "Reset tip progress" link — runs the client command that
+        // clears the one-time-tip seen-set (cloth has no push-button, so a
+        // text-description with a RUN_COMMAND click event is the in-framework way).
+        val resetTipsText = Text.literal("§e§n[Reset tip progress]")
+            .setStyle(
+                net.minecraft.text.Style.EMPTY
+                    .withClickEvent(
+                        net.minecraft.text.ClickEvent(
+                            net.minecraft.text.ClickEvent.Action.RUN_COMMAND,
+                            "/storyclient-tips-reset",
+                        ),
+                    )
+                    .withHoverEvent(
+                        net.minecraft.text.HoverEvent(
+                            net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+                            Text.literal("Re-show all one-time tips."),
+                        ),
+                    ),
+            )
+        general.addEntry(entryBuilder.startTextDescription(resetTipsText).build())
 
         // Audio Category
         val audio: ConfigCategory = builder.getOrCreateCategory(Text.literal("Audio"))
@@ -130,6 +189,10 @@ object StoryClientConfigScreen {
                 .setTooltip(Text.literal("Distance (in blocks) before audio volume attenuation starts"))
                 .build()
         )
+
+        // Note: per-character voice DSP (pitch/gain/low-pass/tone) is applied
+        // SERVER-SIDE by StoryMC (VoiceFxProcessor) using each character's
+        // chargen-sampled fx, so the client no longer exposes voice DSP sliders.
 
         return builder.build()
     }

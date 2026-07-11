@@ -106,8 +106,12 @@ object DMPanelManager {
             renderMenuBar()
             panels.forEach { runCatching { it.render() } }
         }
-        runCatching { HealthPanel.render() }
-        runCatching { SkillsPanel.render() }
+        // Health + Skills are now drawn natively inside the inventory screen
+        // (InventorySkillsPanelMixin + Health/SkillsNativeView), so the imgui
+        // windows are suppressed. The imgui HealthView/SkillsView + HealthPanel/
+        // SkillsPanel remain for the DM selected-character panel's health body.
+        // runCatching { HealthPanel.render() }
+        // runCatching { SkillsPanel.render() }
 
         ImGui.render()
         imguiGl3.renderDrawData(ImGui.getDrawData())

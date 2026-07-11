@@ -4,8 +4,13 @@ import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
 import java.io.ByteArrayInputStream
-import kotlin.math.*
 
+/**
+ * A single NPC voice fed to the software mixer. The client applies only spatial
+ * effects — volume (distance) and pan (direction). Per-character voice DSP
+ * (pitch/gain/low-pass/tone) is baked into the audio SERVER-SIDE by StoryMC's
+ * VoiceFxProcessor, so the client just plays what it receives.
+ */
 class PositionalVoice(
     val id: String,
     private val stream: AudioInputStream

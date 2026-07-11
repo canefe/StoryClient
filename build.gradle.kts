@@ -44,6 +44,9 @@ repositories {
     mavenCentral()
     maven { url = uri("https://maven.shedaniel.me/") }
     maven { url = uri("https://maven.terraformersmc.com/releases/") }
+    // Immersive Messages API + its required txnilib dependency
+    maven { url = uri("https://maven.txni.dev/") }
+    maven { url = uri("https://maven.su5ed.dev/releases") }
 }
 
 dependencies {
@@ -56,6 +59,17 @@ dependencies {
     modImplementation("net.fabricmc.fabric-api:fabric-api:${project.property("fabric_version")}")
     modApi("me.shedaniel.cloth:cloth-config-fabric:15.0.140")
     modApi("com.terraformersmc:modmenu:11.0.3")
+
+    // Immersive Messages API — animated on-screen tooltips/messages.
+    // Upstream maven (maven.txni.dev) is unreachable from here, so we resolve the
+    // already-remapped Fabric jars locally from run/mods and let Loom remap them
+    // into the dev workspace. Versions tracked in gradle.properties for clarity.
+    val loader = "fabric"
+    val mcVersion = project.property("minecraft_version")
+    val immersiveMessagesVersion = project.property("immersive_messages_version")
+    val txnilibVersion = project.property("txnilib_version")
+    modImplementation(files("run/mods/immersivemessages-$loader-$immersiveMessagesVersion-$mcVersion.jar"))
+    modImplementation(files("run/mods/txnilib-$loader-$txnilibVersion-$mcVersion.jar"))
 
     // Add MP3 support
     implementation("javazoom:jlayer:1.0.1")

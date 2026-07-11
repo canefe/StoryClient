@@ -25,6 +25,14 @@ object SkillIcons {
         "persuasion" to "item/written_book",
     )
 
+    /**
+     * The vanilla item texture path (under assets/minecraft/textures/) for a
+     * skill id, e.g. "item/iron_sword". Falls back to a generic book. Used by
+     * the native (DrawContext) Skills panel, which draws via [Identifier] +
+     * drawTexture rather than the GL-handle [glId] path imgui needs.
+     */
+    fun pathFor(skillId: String): String = byId[skillId] ?: "item/book"
+
     fun glId(skillId: String): Long {
         val path = byId[skillId] ?: "item/book"
         val id = Identifier.of("minecraft", "textures/$path.png")

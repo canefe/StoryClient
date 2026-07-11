@@ -426,22 +426,47 @@ object BubbleRenderer {
         light: Int = 15728880,
     ) {
         val alpha = ((color ushr 24) and 0xFF)
-        val outlineColor = (alpha shl 24) // pure black with text's alpha
-        val outlineText = Text.literal(text.string).styled {
-            it.withColor(0x000000).withBold(text.style.isBold).withItalic(text.style.isItalic)
+        // Black copy of the text (preserving alpha/style) used for both the
+        // outline and the drop-shadow so they sit correctly behind the main text.
+        val darkText by lazy {
+            Text.literal(text.string).styled {
+                it.withColor(0x000000).withBold(text.style.isBold).withItalic(text.style.isItalic)
+            }
+        }
+        val darkColor = (alpha shl 24) // pure black with the text's alpha
+
+        // The dark copies (shadow + outline) and the main text are coplanar in this
+        // billboard, so at the same Z they z-fight and the dark can win in front of a
+        // glyph (the "shadow in front" bug, worse up close where the tiny Z gap falls
+        // below depth-buffer precision; the tilted, spaced-out action words rarely
+        // overlap so they looked fine). Push the dark copies AWAY from the camera in
+        // local Z so they are unambiguously behind. This matrix already has the ~0.02
+        // billboard scale baked in, so local Z is compressed hard — the push has to be
+        // large in local units to clear depth precision at close range. Z scale is
+        // positive and the billboard faces the camera, so +local Z = farther = behind.
+        val shadowMatrix = Matrix4f(matrix).translate(0f, 0f, 3f)
+
+        // Drop-shadow: a single dark copy offset down-right.
+        if (StoryClientConfig.bubbleTextShadow) {
+            textRenderer.draw(
+                darkText, x + 1f, y + 1f, darkColor, false,
+                shadowMatrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+            )
         }
 
         // 8-direction outline at 1px offset for a clean, pill-free border.
-        val offsets = arrayOf(
-            -1f to -1f, 0f to -1f, 1f to -1f,
-            -1f to 0f,            1f to 0f,
-            -1f to 1f,  0f to 1f, 1f to 1f,
-        )
-        for ((dx, dy) in offsets) {
-            textRenderer.draw(
-                outlineText, x + dx, y + dy, outlineColor, false,
-                matrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+        if (StoryClientConfig.bubbleTextOutline) {
+            val offsets = arrayOf(
+                -1f to -1f, 0f to -1f, 1f to -1f,
+                -1f to 0f,            1f to 0f,
+                -1f to 1f,  0f to 1f, 1f to 1f,
             )
+            for ((dx, dy) in offsets) {
+                textRenderer.draw(
+                    darkText, x + dx, y + dy, darkColor, false,
+                    shadowMatrix, consumers, TextRenderer.TextLayerType.SEE_THROUGH, 0, light,
+                )
+            }
         }
         // Main text on top, no background pill.
         textRenderer.draw(
@@ -461,7 +486,7 @@ object BubbleRenderer {
     ) {
         val entityPos = getInterpolatedPosition(entity, tickDelta)
         val entityHeight = entity.height
-        val anchorPos = entityPos.add(0.0, entityHeight.toDouble() + 0.4, 0.0)
+        val anchorPos = entityPos.add(0.0, entityHeight.toDouble() + 0.4 + StoryClientConfig.bubbleYOffset, 0.0)
 
         val difference = cameraPos.subtract(anchorPos)
         val yaw = -(atan2(difference.z, difference.x) + PI / 2.0)

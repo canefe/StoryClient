@@ -1,5 +1,7 @@
 package com.canefe.storyclient.client.mixin;
 
+import com.canefe.storyclient.client.camera.OocCameraController;
+import com.canefe.storyclient.client.cinematic.SpawnCinematicController;
 import com.canefe.storyclient.client.pause.PauseState;
 import net.minecraft.client.input.Input;
 import net.minecraft.client.input.KeyboardInput;
@@ -22,7 +24,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class PlayerFreezeMixin {
     @Inject(method = "tick(ZF)V", at = @At("TAIL"))
     private void storyclient$freezeWhilePaused(boolean slowDown, float slowDownFactor, CallbackInfo ci) {
-        if (!PauseState.INSTANCE.getPaused()) return;
+        if (!PauseState.INSTANCE.getPaused()
+            && !SpawnCinematicController.INSTANCE.isActive()
+            && !OocCameraController.INSTANCE.isActive()) return;
         Input self = (Input) (Object) this;
         self.movementForward = 0.0f;
         self.movementSideways = 0.0f;

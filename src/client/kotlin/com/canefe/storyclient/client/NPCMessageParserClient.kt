@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
@@ -22,6 +23,7 @@ import com.canefe.storyclient.client.decision.DecisionHud
 import com.canefe.storyclient.client.emote.EmoteRenderer
 import com.canefe.storyclient.client.emote.NpcEmoteIconPayload
 import com.canefe.storyclient.client.pacing.NpcEventPacer
+import com.canefe.storyclient.client.ui.UIMessages
 
 class NPCMessageParserClient : ClientModInitializer {
     companion object {
@@ -77,6 +79,22 @@ class NPCMessageParserClient : ClientModInitializer {
     override fun onInitializeClient() {
         instance = this
         StoryClientConfig.load()
+        com.canefe.storyclient.client.tips.TipManager.load()
+
+        // Teach the Health + Skills tabs that render beside the inventory. The
+        // library shows one toast at a time, so we sequence them across opens:
+        // Health on the first inventory open, Skills on the next. TipManager makes
+        // each once-ever, so once both are seen this does nothing.
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (screen is net.minecraft.client.gui.screen.ingame.InventoryScreen) {
+                val tips = com.canefe.storyclient.client.tips.TipManager
+                if (!tips.hasSeen("inventory_health_tab")) {
+                    tips.show("inventory_health_tab")
+                } else {
+                    tips.show("inventory_skills_tab")
+                }
+            }
+        }
 
         // Register the AudioPayload type first (for modern clients)
         PayloadTypeRegistry.playS2C().register(AudioPayload.ID, AudioPayload.CODEC)
@@ -275,6 +293,11 @@ class NPCMessageParserClient : ClientModInitializer {
         com.canefe.storyclient.client.hediff.HediffPacketReceiver.register()
         // Player moodlet HUD (s2c) — shares the right-edge column with hediffs
         com.canefe.storyclient.client.hediff.MoodletPacketReceiver.register()
+        // Inventory corner widget (s2c) — generic rows rendered in the freed-up
+        // crafting-grid corner of the survival inventory.
+        com.canefe.storyclient.client.inventory.InventoryWidgetPacketReceiver.register()
+        // Local player's own Story character data (s2c) — name for the spawn title, etc.
+        com.canefe.storyclient.client.character.SelfCharacterPacketReceiver.register()
 
         // Directional combat: register all C2S and S2C payloads.
         PayloadTypeRegistry.playC2S().register(
@@ -400,6 +423,10 @@ class NPCMessageParserClient : ClientModInitializer {
         // KeyBindingHelper inside the helper so the category appears in Options.
         com.canefe.storyclient.client.permission.PermissionKeybinds.register()
 
+        // Out-of-character spectator camera (debug toggle: O). Client-only orbit
+        // around our own body; the camera mixin reads its transform per frame.
+        com.canefe.storyclient.client.camera.OocCameraController.register()
+
         // Edge-tracked keys for the decision HUD (no Screen, so we poll GLFW directly)
         val decisionKeys = intArrayOf(
             org.lwjgl.glfw.GLFW.GLFW_KEY_1,
@@ -419,19 +446,13 @@ class NPCMessageParserClient : ClientModInitializer {
         )
         val decisionKeyDown = java.util.HashMap<Int, Boolean>()
 
-        // Tracks whether the Health panel was auto-opened by the inventory screen
-        // (E), so we only auto-close the copy we opened and never fight a manual
-        // H toggle. Also remembers the last inventory-open state for edge detection.
-        var healthOpenedByInventory = false
-        var skillsOpenedByInventory = false
-        var inventoryWasOpen = false
-
         // Register tick event for TypingManager + DecisionState
         ClientTickEvents.END_CLIENT_TICK.register {
             TypingManager.tick()
             com.canefe.storyclient.client.decision.DecisionState.tick()
             com.canefe.storyclient.client.decision.CinematicCameraController.tick()
             com.canefe.storyclient.client.permission.PermissionKeybinds.tickKeybinds()
+            com.canefe.storyclient.client.camera.OocCameraController.tick()
 
             // Decision HUD key polling — edge-triggered, only when a prompt is active
             if (com.canefe.storyclient.client.decision.DecisionState.activePrompt != null) {
@@ -472,37 +493,18 @@ class NPCMessageParserClient : ClientModInitializer {
                 com.canefe.storyclient.client.dm.DMPanelManager.toggle()
             }
 
-            // Health window toggle: edge-triggered on H press.
+            // H opens the inventory on the Health tab. The Health/Skills panels
+            // now live inside the inventory screen (StoryTabsPanel via mixin), so
+            // H just selects the tab and opens the inventory; the tab is then
+            // remembered for the session.
             while (healthKey.wasPressed()) {
-                com.canefe.storyclient.client.health.HealthPanel.toggle()
+                com.canefe.storyclient.client.panel.StoryTabsPanel.select("health")
+                val mc = net.minecraft.client.MinecraftClient.getInstance()
+                val player = mc.player
+                if (player != null && mc.currentScreen == null) {
+                    mc.setScreen(net.minecraft.client.gui.screen.ingame.InventoryScreen(player))
+                }
             }
-
-            // Mirror the Health panel onto the vanilla inventory screen (E): open
-            // it when the inventory opens, close it when the inventory closes.
-            // Only touch the copy we opened so a manual H toggle stays independent.
-            val inventoryOpen =
-                net.minecraft.client.MinecraftClient.getInstance().currentScreen is
-                    net.minecraft.client.gui.screen.ingame.InventoryScreen
-            if (inventoryOpen && !inventoryWasOpen) {
-                if (!com.canefe.storyclient.client.health.HealthPanel.isOpen()) {
-                    com.canefe.storyclient.client.health.HealthPanel.setOpen(true)
-                    healthOpenedByInventory = true
-                }
-                if (!com.canefe.storyclient.client.skills.SkillsPanel.isOpen()) {
-                    com.canefe.storyclient.client.skills.SkillsPanel.setOpen(true)
-                    skillsOpenedByInventory = true
-                }
-            } else if (!inventoryOpen && inventoryWasOpen) {
-                if (healthOpenedByInventory) {
-                    com.canefe.storyclient.client.health.HealthPanel.setOpen(false)
-                }
-                healthOpenedByInventory = false
-                if (skillsOpenedByInventory) {
-                    com.canefe.storyclient.client.skills.SkillsPanel.setOpen(false)
-                }
-                skillsOpenedByInventory = false
-            }
-            inventoryWasOpen = inventoryOpen
 
             // DEBUG: replay the spawn cinematic on B press (for tuning the swoop).
             while (spawnCinematicReplayKey.wasPressed()) {
@@ -554,6 +556,7 @@ class NPCMessageParserClient : ClientModInitializer {
         // once per frame, before world rendering applies the post effect.
         WorldRenderEvents.START.register { _ ->
             com.canefe.storyclient.client.cinematic.SpawnCinematicPostEffect.tick()
+            com.canefe.storyclient.client.camera.OocPostEffect.tick()
         }
 
         // Register world render event for BubbleRenderer + squad badges + formation preview
@@ -584,6 +587,17 @@ class NPCMessageParserClient : ClientModInitializer {
                         val recogSize = com.canefe.storyclient.client.recognition.RecognitionCache.size()
                         ctx.source.sendFeedback(net.minecraft.text.Text.literal(
                             "  NearbyNPCCache=$cacheSize, RecognitionCache=$recogSize"
+                        ))
+                        1
+                    })
+
+            // Reset one-time tip progress (also the target of the config-menu link)
+            dispatcher.register(
+                ClientCommandManager.literal("storyclient-tips-reset")
+                    .executes { ctx ->
+                        com.canefe.storyclient.client.tips.TipManager.resetProgress()
+                        ctx.source.sendFeedback(net.minecraft.text.Text.literal(
+                            "§aTip progress reset §7— all tips will show again."
                         ))
                         1
                     })
@@ -679,6 +693,11 @@ class NPCMessageParserClient : ClientModInitializer {
 
                         1
                     })
+        }
+
+        // Show an Immersive Messages welcome overlay when joining a server.
+        ClientPlayConnectionEvents.JOIN.register { _, _, _ ->
+            UIMessages.sendSmallText("Welcome to Story")
         }
     }
 

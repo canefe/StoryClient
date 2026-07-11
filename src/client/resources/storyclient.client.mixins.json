@@ -11,6 +11,9 @@
     "CameraAccessor",
     "CameraShakeMixin",
     "SpawnCinematicCameraMixin",
+    "OocCameraMixin",
+    "InteractionLockMixin",
+    "DropItemLockMixin",
     "GameRendererAccessor",
     "MouseMixin",
     "MouseButtonMixin",
@@ -22,6 +25,11 @@
     "DownloadingTerrainScreenAccessor",
     "ConnectScreenMixin",
     "InventoryScreenBackgroundMixin",
+    "InventorySkillsPanelMixin",
+    "InventoryCraftingHiderMixin",
+    "HandledScreenLayoutAccessor",
+    "RecipeBookWidgetAccessor",
+    "SlotAccessor",
     "TextSerializationAccessor"
   ],
   "injectors": {
