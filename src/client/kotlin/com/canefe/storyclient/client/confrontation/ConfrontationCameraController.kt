@@ -71,6 +71,40 @@ object ConfrontationCameraController {
     fun midpoint(a: Vec3d, b: Vec3d): Vec3d =
         Vec3d((a.x + b.x) / 2.0, (a.y + b.y) / 2.0, (a.z + b.z) / 2.0)
 
+    /** Radius (blocks) within which a non-focused entity blocks the shot. */
+    private const val CULL_RADIUS = 2.0
+
+    /**
+     * True when [entity] should be culled this frame: the scene is active, the
+     * entity is NOT the current shot's subject, and it is within [CULL_RADIUS] of
+     * the camera (so it would occlude the framed character). Consulted by the
+     * entity-render mixin.
+     */
+    fun shouldCull(entity: Entity, cameraPos: Vec3d): Boolean {
+        if (!active) return false
+        if (isShotSubject(entity)) return false
+        return entity.squaredDistanceTo(cameraPos) <= CULL_RADIUS * CULL_RADIUS
+    }
+
+    /** Whether [entity] is a subject of the current shot (stays visible). */
+    private fun isShotSubject(entity: Entity): Boolean {
+        val (activeE, otherE) = subjectEntities() ?: return false
+        return when (shot) {
+            1 -> entity == activeE || entity == otherE // two-shot: both framed
+            0 -> entity == activeE
+            else -> entity == otherE
+        }
+    }
+
+    /** Resolve the two shot subjects as entities (active + other/target). */
+    private fun subjectEntities(): Pair<Entity?, Entity?>? {
+        val client = MinecraftClient.getInstance()
+        val activeE = resolve(ConfrontationState.activeCharacterId) ?: client.player
+        val otherE = resolve(ConfrontationState.targetCharacterId)
+            ?: activeE?.let { otherRosterEntity(it) }
+        return activeE to otherE
+    }
+
     // ── transform contract (always active while the scene is) ────────────────
 
     fun cameraPos(tickDelta: Float): Vec3d? {

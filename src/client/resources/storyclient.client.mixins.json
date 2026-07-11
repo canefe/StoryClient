@@ -8,6 +8,7 @@
     "ClientConnectionMixin",
     "ClientPlayNetworkHandlerMixin",
     "EntityRendererLabelMixin",
+    "ConfrontationCullMixin",
     "CameraAccessor",
     "CameraShakeMixin",
     "SpawnCinematicCameraMixin",
