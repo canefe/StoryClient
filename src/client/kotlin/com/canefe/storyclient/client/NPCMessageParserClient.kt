@@ -744,7 +744,15 @@ class NPCMessageParserClient : ClientModInitializer {
 
         // Show an Immersive Messages welcome overlay when joining a server.
         ClientPlayConnectionEvents.JOIN.register { _, _, _ ->
+            // A stale confrontation must never survive a rejoin — tear it down so
+            // the player isn't held in a lock/HUD-hidden/camera state on connect.
+            com.canefe.storyclient.client.confrontation.ConfrontationState.forceReset()
             UIMessages.sendSmallText("Welcome to Story")
+        }
+        // Leaving a server must also clear the lock, or an ungraceful disconnect
+        // strands the player frozen when they come back.
+        ClientPlayConnectionEvents.DISCONNECT.register { _, _ ->
+            com.canefe.storyclient.client.confrontation.ConfrontationState.forceReset()
         }
     }
 

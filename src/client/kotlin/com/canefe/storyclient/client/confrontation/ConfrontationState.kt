@@ -71,6 +71,25 @@ object ConfrontationState {
         activeCharacterId = null
         targetCharacterId = null
     }
+
+    /**
+     * Full teardown for connect/disconnect: clears state AND stops the camera
+     * controller (which restores the hidden HUD). Use this on JOIN/DISCONNECT so a
+     * stale confrontation can never strand the player in a lock/hidden-HUD/camera
+     * state — no exit packet is guaranteed on an ungraceful disconnect.
+     */
+    fun forceReset() {
+        val wasActive = active
+        exit()
+        // Always stop the camera (idempotent) so hudHidden is restored even if the
+        // camera thought it was inactive.
+        ConfrontationCameraController.stop()
+        if (wasActive) {
+            // Belt-and-suspenders: ensure the vanilla HUD is back on.
+            net.minecraft.client.MinecraftClient.getInstance().options.hudHidden = false
+        }
+        ConfrontationOverlay.cancelFreeform()
+    }
 }
 
 /** A single option shown to the player. [dc] is null when the choice is unchecked. */
