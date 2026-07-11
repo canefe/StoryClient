@@ -122,37 +122,38 @@ object ConfrontationCameraController {
 
     fun cameraPos(tickDelta: Float): Vec3d? {
         if (!active) return null
-        val (a, b) = ends() ?: return null
         val sway = swayPos()
-        return when (shot) {
-            1 -> {
-                // Two-shot: off the perpendicular of the a→b line, backed off.
-                val mid = midpoint(a, b)
-                val (px, pz) = perp(a, b)
-                Vec3d(
-                    mid.x + px * TWO_SHOT_SIDE + pz * -TWO_SHOT_BACK + sway.x,
-                    mid.y + 0.4 + sway.y,
-                    mid.z + pz * TWO_SHOT_SIDE + px * TWO_SHOT_BACK + sway.z,
-                )
-            }
-            else -> {
-                // Close-up: a 3/4 face shot. Place the lens toward the other
-                // participant (so we see the subject facing them) but pushed OFF
-                // to the side and lifted, so the camera never sits on the line
-                // between the two models (which would land inside the other one).
-                val (face, other) = if (shot == 0) a to b else b to a
-                val (fx, fz) = horizNorm(other.x - face.x, other.z - face.z)
-                // Perpendicular for the lateral kick (which side depends on shot).
-                val side = if (shot == 0) 1.0 else -1.0
-                val px = -fz * side
-                val pz = fx * side
-                Vec3d(
-                    face.x + fx * (CLOSEUP_DISTANCE * 0.55) + px * (CLOSEUP_DISTANCE * 0.7) + sway.x,
-                    face.y + 0.35 + sway.y, // lifted, so we look slightly down at the face
-                    face.z + fz * (CLOSEUP_DISTANCE * 0.55) + pz * (CLOSEUP_DISTANCE * 0.7) + sway.z,
-                )
-            }
+        if (shot == 1) {
+            // Two-shot: off the perpendicular of the a→b line, backed off.
+            val (a, b) = ends() ?: return null
+            val mid = midpoint(a, b)
+            val (px, pz) = perp(a, b)
+            return Vec3d(
+                mid.x + px * TWO_SHOT_SIDE + pz * -TWO_SHOT_BACK + sway.x,
+                mid.y + 0.4 + sway.y,
+                mid.z + pz * TWO_SHOT_SIDE + px * TWO_SHOT_BACK + sway.z,
+            )
         }
+        // Close-up — AFKcamera style. Stand at the subject's eye, take the
+        // direction the SUBJECT is facing (their own yaw = where their face
+        // points), step out along it, and look back at the face. This is the
+        // afkcam mirror-and-move-forward trick: it never lands behind the model
+        // regardless of where the other participant stands.
+        val subj = closeUpSubject() ?: return null
+        val eye = subj.getCameraPosVec(tickDelta)
+        val yawRad = Math.toRadians(subj.getYaw(tickDelta).toDouble())
+        // MC facing: forward = (-sin yaw, 0, cos yaw). The camera goes OUT along
+        // the subject's facing (in front of their face) with a small side kick.
+        val fx = -Math.sin(yawRad)
+        val fz = Math.cos(yawRad)
+        val side = if (shot == 0) 1.0 else -1.0
+        val px = fz * side // perpendicular to facing (horizontal)
+        val pz = -fx * side
+        return Vec3d(
+            eye.x + fx * CLOSEUP_DISTANCE + px * (CLOSEUP_DISTANCE * 0.35) + sway.x,
+            eye.y + 0.25 + sway.y,
+            eye.z + fz * CLOSEUP_DISTANCE + pz * (CLOSEUP_DISTANCE * 0.35) + sway.z,
+        )
     }
 
     fun cameraYaw(): Float? {
@@ -179,12 +180,23 @@ object ConfrontationCameraController {
 
     /** The point the lens looks at this shot (a face, or the midpoint). */
     private fun lookTarget(): Vec3d? {
-        val (a, b) = ends() ?: return null
-        return when (shot) {
-            1 -> midpoint(a, b)
-            0 -> a
-            else -> b
+        if (shot == 1) {
+            val (a, b) = ends() ?: return null
+            return midpoint(a, b)
         }
+        // Close-up: look at the subject's face (eye position).
+        val subj = closeUpSubject() ?: return null
+        return eye(subj)
+    }
+
+    /** The entity framed by the current close-up shot (0 = active, 2 = other). */
+    private fun closeUpSubject(): Entity? {
+        val client = MinecraftClient.getInstance()
+        val activeE = resolve(ConfrontationState.activeCharacterId) ?: client.player
+        val otherE = resolve(ConfrontationState.targetCharacterId)
+            ?: activeE?.let { otherRosterEntity(it) }
+            ?: client.player
+        return if (shot == 0) activeE else otherE
     }
 
     /** Eye positions of the two framed participants (active + target/other). */
