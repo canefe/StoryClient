@@ -21,14 +21,15 @@ object ConfrontationCameraController {
     /** Seconds a shot holds before cutting. */
     private const val SHOT_HOLD_SECONDS = 4.0
 
-    /** Close-up: how far in front of the face the lens sits (blocks). */
-    private const val CLOSEUP_DISTANCE = 1.6
+    /** Close-up: how far in front of the face the lens sits (blocks). A MC head
+     * cube is ~0.5 block, so anything under ~2.5 puts the lens inside the model. */
+    private const val CLOSEUP_DISTANCE = 3.0
 
     /** Two-shot: lateral offset from the midpoint (blocks). */
-    private const val TWO_SHOT_SIDE = 3.2
+    private const val TWO_SHOT_SIDE = 4.0
 
     /** Two-shot: how far back from the midpoint (blocks). */
-    private const val TWO_SHOT_BACK = 2.2
+    private const val TWO_SHOT_BACK = 4.5
 
     private const val SWAY_POS_AMP = 0.18
     private const val SWAY_ANGLE_AMP = 0.35f
@@ -71,8 +72,10 @@ object ConfrontationCameraController {
     fun midpoint(a: Vec3d, b: Vec3d): Vec3d =
         Vec3d((a.x + b.x) / 2.0, (a.y + b.y) / 2.0, (a.z + b.z) / 2.0)
 
-    /** Radius (blocks) within which a non-focused entity blocks the shot. */
-    private const val CULL_RADIUS = 2.0
+    /** Radius (blocks) within which a non-focused entity blocks the shot. Set a
+     * hair under the close-up distance so anything nearer the lens than the
+     * framed subject gets culled, but the subject itself never does. */
+    private const val CULL_RADIUS = 2.6
 
     /**
      * True when [entity] should be culled this frame: the scene is active, the
@@ -123,14 +126,20 @@ object ConfrontationCameraController {
                 )
             }
             else -> {
-                // Close-up: in FRONT of the speaker's face, offset toward the
-                // other participant so we see their face 3/4 on.
+                // Close-up: a 3/4 face shot. Place the lens toward the other
+                // participant (so we see the subject facing them) but pushed OFF
+                // to the side and lifted, so the camera never sits on the line
+                // between the two models (which would land inside the other one).
                 val (face, other) = if (shot == 0) a to b else b to a
-                val dir = horizNorm(other.x - face.x, other.z - face.z)
+                val (fx, fz) = horizNorm(other.x - face.x, other.z - face.z)
+                // Perpendicular for the lateral kick (which side depends on shot).
+                val side = if (shot == 0) 1.0 else -1.0
+                val px = -fz * side
+                val pz = fx * side
                 Vec3d(
-                    face.x + dir.first * CLOSEUP_DISTANCE + sway.x,
-                    face.y + sway.y,
-                    face.z + dir.second * CLOSEUP_DISTANCE + sway.z,
+                    face.x + fx * (CLOSEUP_DISTANCE * 0.55) + px * (CLOSEUP_DISTANCE * 0.7) + sway.x,
+                    face.y + 0.35 + sway.y, // lifted, so we look slightly down at the face
+                    face.z + fz * (CLOSEUP_DISTANCE * 0.55) + pz * (CLOSEUP_DISTANCE * 0.7) + sway.z,
                 )
             }
         }
