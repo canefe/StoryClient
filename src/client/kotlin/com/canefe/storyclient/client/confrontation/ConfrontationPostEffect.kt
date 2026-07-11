@@ -22,7 +22,11 @@ object ConfrontationPostEffect {
     fun tick() {
         val mc = MinecraftClient.getInstance()
         val renderer = mc.gameRenderer as GameRendererAccessor
-        val active = ConfrontationState.active
+        // Yield to the spawn cinematic (it owns the processor during boot). Only
+        // one post-effect may own the single GameRenderer processor slot per
+        // frame — without this, two effects thrash load/disable → flicker.
+        val active = ConfrontationState.active &&
+            !com.canefe.storyclient.client.cinematic.SpawnCinematicController.isActive
 
         if (active && !loaded) {
             renderer.`storyclient$loadPostProcessor`(EFFECT_ID)

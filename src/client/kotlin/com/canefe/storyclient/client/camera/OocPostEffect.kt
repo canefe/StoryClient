@@ -38,7 +38,9 @@ object OocPostEffect {
     fun tick() {
         val mc = MinecraftClient.getInstance()
         val renderer = mc.gameRenderer as GameRendererAccessor
-        val active = OocCameraController.isActive && !SpawnCinematicController.isActive
+        val active = OocCameraController.isActive &&
+            !SpawnCinematicController.isActive &&
+            !com.canefe.storyclient.client.confrontation.ConfrontationState.active
 
         if (active && !loaded) {
             renderer.`storyclient$loadPostProcessor`(EFFECT_ID)

@@ -69,7 +69,7 @@ public abstract class OocCameraMixin {
         float tickDelta,
         CallbackInfo ci
     ) {
-        if (!ConfrontationCameraController.INSTANCE.isTwoShot()) return;
+        if (!ConfrontationCameraController.INSTANCE.isActive()) return;
 
         Vec3d pos = ConfrontationCameraController.INSTANCE.cameraPos(tickDelta);
         Float yaw = ConfrontationCameraController.INSTANCE.cameraYaw();
