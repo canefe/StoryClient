@@ -4,7 +4,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
-import net.minecraft.client.MinecraftClient
 import net.minecraft.network.PacketByteBuf
 import net.minecraft.network.codec.PacketCodec
 import net.minecraft.network.packet.CustomPayload
@@ -88,7 +87,10 @@ object ConfrontationPacketReceiver {
                 0x02.toByte() -> {
                     val t = ConfrontationState.json.decodeFromString(TurnS2C.serializer(), json)
                     ConfrontationState.setTurn(t.active_character_id)
-                    if (t.active_character_id != localCharacterId()) {
+                    // active_character_id is a CHARACTER id — compare against the
+                    // server-pushed self character id, NOT the MC player UUID.
+                    val me = localCharacterId()
+                    if (me != null && t.active_character_id != me) {
                         ConfrontationState.clearMyTurn()
                     }
                 }
@@ -107,7 +109,7 @@ object ConfrontationPacketReceiver {
     }
 
     private fun localCharacterId(): String? =
-        MinecraftClient.getInstance().player?.uuidAsString
+        com.canefe.storyclient.client.character.SelfCharacterState.characterId.ifBlank { null }
 
     fun sendPick(confrontationId: String, choiceId: String) {
         send(ResponseDto(confrontationId = confrontationId, choiceId = choiceId))
