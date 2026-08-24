@@ -45,7 +45,19 @@ object ConfrontationState {
     fun setChoices(view: ChoicesS2C) {
         prompt = view.prompt
         allowFreeText = view.allow_free_text
-        choices = view.choices.map { ChoiceView(it.id, it.label, it.check?.dc) }
+        choices = view.choices.map { dto ->
+            val check = dto.check?.let { c ->
+                CheckView(
+                    kind = c.kind,
+                    skill = c.skill,
+                    actorSkillValue = c.actor_skill_value.toInt(),
+                    dc = c.dc,
+                    vsSkill = c.vs_skill,
+                    targetSkillValue = c.target_skill_value?.toInt(),
+                )
+            }
+            ChoiceView(dto.id, dto.label, check)
+        }
         myTurn = true
     }
 
@@ -92,8 +104,25 @@ object ConfrontationState {
     }
 }
 
-/** A single option shown to the player. [dc] is null when the choice is unchecked. */
-data class ChoiceView(val id: String, val label: String, val dc: Int?)
+/**
+ * A single option shown to the player.
+ *
+ * [check] is null when the option rolls nothing (unchecked). When present it
+ * carries the full mechanics the player is betting on — skill name, the player's
+ * own value in that skill, the DC (static), and the opposed defender's skill +
+ * value — so the UI can render "which skill, how good am I, what am I beating".
+ */
+data class ChoiceView(val id: String, val label: String, val check: CheckView?)
+
+/** Resolved mechanics for a checked choice, ready for display. */
+data class CheckView(
+    val kind: String,              // "static" | "opposed"
+    val skill: String,             // acting player's skill being rolled
+    val actorSkillValue: Int,      // the player's value in [skill] (0 if unknown)
+    val dc: Int?,                  // static only
+    val vsSkill: String?,          // opposed only — defender's skill
+    val targetSkillValue: Int?,    // opposed only — defender's value
+)
 
 // ── S2C wire DTOs (snake_case to match story-go BridgeMessage.Data) ──────────
 
@@ -116,7 +145,11 @@ data class ChoiceDto(
 @Serializable
 data class CheckDto(
     val kind: String,
+    val skill: String = "",
     val dc: Int? = null,
+    val vs_skill: String? = null,
+    val actor_skill_value: Double = 0.0,
+    val target_skill_value: Double? = null,
 )
 
 @Serializable

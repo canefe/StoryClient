@@ -32,6 +32,28 @@ object ConfrontationOverlay {
     private const val PANEL_BG = 0xCC101014.toInt() // near-opaque dark panel
     private const val PANEL_EDGE = 0xFF3A3A44.toInt()
 
+    /**
+     * The mechanics suffix shown after a choice label: which skill is rolled,
+     * the player's own value in it, and what they're beating. Empty for an
+     * unchecked choice (nothing is rolled). Placeholder text-tag form; a richer
+     * visual treatment can replace this later without touching the wire/state.
+     *   static:  " [Persuasion 0 vs DC 14]"
+     *   opposed: " [Combat 5 vs their Willpower 0]"
+     */
+    private fun mechanicsTag(check: CheckView?): String {
+        if (check == null) return ""
+        val skill = check.skill.replaceFirstChar { it.uppercase() }
+        return when (check.kind) {
+            "static" ->
+                if (check.dc != null) " [$skill ${check.actorSkillValue} vs DC ${check.dc}]" else ""
+            "opposed" -> {
+                val vs = (check.vsSkill ?: "").replaceFirstChar { it.uppercase() }
+                " [$skill ${check.actorSkillValue} vs their $vs ${check.targetSkillValue ?: 0}]"
+            }
+            else -> ""
+        }
+    }
+
     fun render(ctx: DrawContext) {
         if (!ConfrontationState.active) return
         val mc = MinecraftClient.getInstance()
@@ -59,8 +81,7 @@ object ConfrontationOverlay {
         ConfrontationState.prompt?.let { addWrapped(it, WHITE) }
         if (ConfrontationState.myTurn) {
             ConfrontationState.choices.forEachIndexed { i, choice ->
-                val dc = choice.dc?.let { " (DC $it)" } ?: ""
-                addWrapped("[${i + 1}] ${choice.label}$dc", WHITE, hangingIndent = "     ")
+                addWrapped("[${i + 1}] ${choice.label}${mechanicsTag(choice.check)}", WHITE, hangingIndent = "     ")
             }
             if (ConfrontationState.allowFreeText) {
                 val text = if (freeformMode) "> $freeformInput|" else "[T] say something…"

@@ -222,6 +222,16 @@ object BubbleRenderer {
         state.entityId?.let { id ->
             world.getEntityById(id)?.let { return it }
         }
+        // The local player's own dialogue is keyed by its Story character id, not
+        // the player entity's account UUID, so the UUID search below can't match
+        // it. Anchor it to the local player entity directly.
+        val self = com.canefe.storyclient.client.character.SelfCharacterState.characterId
+        if (self.isNotEmpty() && state.npcId == self) {
+            net.minecraft.client.MinecraftClient.getInstance().player?.let {
+                state.entityId = it.id
+                return it
+            }
+        }
         return try {
             val searchBox = Box.of(cameraEntity.pos, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2, RENDER_DISTANCE * 2)
             val found = world.getOtherEntities(null, searchBox) {

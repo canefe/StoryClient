@@ -61,6 +61,15 @@ object TypingManager {
             val player = client.player ?: return null
             val world = client.world ?: return null
 
+            // The local player's own dialogue arrives under its Story character
+            // id, which never equals the player entity's account UUID — so the
+            // UUID search below (which also skips players) can't find it. Anchor
+            // it to the local player entity directly.
+            if (npcId == com.canefe.storyclient.client.character.SelfCharacterState.characterId &&
+                com.canefe.storyclient.client.character.SelfCharacterState.characterId.isNotEmpty()) {
+                return player.id
+            }
+
             val searchBox = net.minecraft.util.math.Box.of(
                 player.pos,
                 64.0, 64.0, 64.0
